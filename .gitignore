@@ -10,5 +10,6 @@ npm-debug.log*
 next-env.d.ts
 /data/*.json
 /data/*.csv
+/data/*.jsonl
 .harness-lock
 *.tsbuildinfo

@@ -13,7 +13,10 @@
     {
       "step": 1,
       "name": "paper-store",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-12T17:51:13+0900",
+      "completed_at": "2026-09-12T17:51:13+0900",
+      "summary": "페이퍼 상태 저장소. 순수 함수(TDD 22개): src/lib/paper/state.ts — PaperState{version,startedAt,equity,startingEquity,guard,pending,position,lastCandleTime,signalCount,currentDay,updatedAt}, PAPER_STATE_VERSION=1, createInitialState, parseState(검증 실패 시 throw가 아니라 null), shouldProcess(확정봉이고 lastCandleTime보다 뒤일 때만), pendingCandles(밀린 캔들을 오름차순으로 전부). src/lib/paper/journal.ts — JournalEntry{type:trade|signal|note,at,...}, toJsonl/parseJsonl(깨진 줄은 건너뛰고 나머지 보존), tradesFromJournal, signalCountFromJournal(체결되지 않은 신호도 세어 체결률 계산). src/services/paper-store.ts — loadState/saveState/appendJournal/loadJournal/resetPaper/statePath. saveState는 임시 파일에 쓰고 fsync 후 rename하는 원자적 방식(ADR-017). 대상 파일에 직접 쓰면 티커가 5분마다 덮어쓰는 도중 프로세스가 죽었을 때 열린 포지션을 통째로 잃는다. appendJournal은 한 줄씩 append하며 전체를 다시 쓰지 않는다. 임시 디렉토리로 실동작 7가지 확인: 상태 없을 때 null / 저장-복원 일치 / .tmp 잔여 없음 / 깨진 파일에 throw 없이 null / append 누적 / 잘린 마지막 줄이 있어도 앞줄 복구 / reset 후 초기화. .gitignore에 /data/*.jsonl 추가. 테스트 22개 추가, 전체 232개 통과. build/lint 통과."
     },
     {
       "step": 2,
