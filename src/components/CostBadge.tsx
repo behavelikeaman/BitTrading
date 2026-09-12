@@ -70,6 +70,13 @@ export function CostBadge({ params }: Props) {
           수수료 응답을 읽지 못했다 — {params.feeShape}
         </span>
       )}
+      {/* 슬리피지는 실거래 체결이 있어야만 실측된다. 왜 아직 추정인지
+          말해주지 않으면 추정값 위에서 계속 매매하게 된다 (ADR-014). */}
+      {params.credential?.ok === true && params.slippageNote != null && (
+        <span className="basis-full text-neutral-400">
+          슬리피지: {params.slippageNote}
+        </span>
+      )}
     </div>
   );
 }

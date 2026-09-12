@@ -8,6 +8,7 @@ import {
 } from '@/services/deepcoin';
 import type { CredentialStatus } from '@/lib/credential-status';
 import { measureSlippage } from '@/lib/measure-slippage';
+import { slippageNote } from '@/lib/slippage-note';
 
 export const runtime = 'nodejs';
 
@@ -29,6 +30,8 @@ export interface AccountParamsResponse {
    * 성공했으면 null이다.
    */
   feeShape: string | null;
+  /** 슬리피지가 실측되지 않은 이유. 실측됐으면 null이다. */
+  slippageNote: string | null;
 }
 
 /**
@@ -68,5 +71,10 @@ export async function GET(): Promise<NextResponse<AccountParamsResponse>> {
     slippageSampleCount: slippage?.sampleCount ?? 0,
     credential,
     feeShape: fee === null ? feeResult.shape : null,
+    slippageNote: slippageNote({
+      fillCount: fills === null ? null : fills.length,
+      matchedCount: slippage?.sampleCount ?? 0,
+      candleCount: candles.length,
+    }),
   });
 }
