@@ -26,7 +26,8 @@ BTC-USDT 무기한 선물 5분봉 단타를 위한 **의사결정 지원 시스�
 
 - [docs/PRD.md](docs/PRD.md) — 기능 정의, 컨플루언스 스코어 8항목, 무효 필터
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 디렉토리 구조, 데이터 흐름, 경계 규칙
-- [docs/ADR.md](docs/ADR.md) — 설계 결정 11건
+- [docs/ADR.md](docs/ADR.md) — 설계 결정 13건
+- [docs/DEEPCOIN-API.md](docs/DEEPCOIN-API.md) — 검증된 Deepcoin 엔드포인트·인증·응답 스펙
 
 ## 핵심 설계 원칙
 

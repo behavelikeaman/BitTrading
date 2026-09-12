@@ -3,7 +3,8 @@
 ## 읽어야 할 파일
 
 - `/docs/ARCHITECTURE.md` (데이터 흐름 — 라우트는 조립만 한다)
-- `/docs/ADR.md` (ADR-004 외부 API는 라우트에서만, ADR-001 함수 공유)
+- `/docs/ADR.md` (ADR-004 외부 API는 라우트에서만, ADR-001 함수 공유, **ADR-012 수수료·유지증거금 실측**)
+- `/docs/DEEPCOIN-API.md`
 - `/CLAUDE.md`
 - Step 1~4의 `src/lib/` 전체, Step 5의 `src/services/` 전체
 - Step 1~4에서 추가된 `src/types/index.ts`
@@ -28,18 +29,26 @@ lib/risk/sizing    : 진입 가능하면 planPosition(...) -> PositionPlan
 - `nowMs`는 서버의 현재 시각을 넣어 `SignalContext`에 주입한다. `src/lib/` 안에서 시각을 읽지 않는다.
 - `runtime = 'nodejs'`로 고정한다. Edge 금지.
 
-### 2. `src/app/api/candles/route.ts` — GET
+### 2. `src/app/api/account-params/route.ts` — GET
+
+ADR-012. Deepcoin에서 **실측** 수수료율과 유지증거금 구간표를 읽어 반환한다.
+
+- `services/deepcoin.ts`의 `fetchTradeFee`·`fetchStepMargin`을 호출한다.
+- 키가 없거나 호출이 실패하면 **500이 아니라 200으로** `{ feeSource: 'default', ... }`를 반환한다. 이유: 실측값이 없어도 기본값으로 동작해야 하고, 화면은 "추정치"라고 표시만 하면 된다.
+- 응답: `{ feeSource: 'measured' | 'default'; maker: number; taker: number; mmrTiers: {maxNotional:number; mmr:number}[] | null }`
+
+### 3. `src/app/api/candles/route.ts` — GET
 
 `?bar=5m&limit=200` 으로 실시간 캔들을 그대로 전달한다. 차트용.
 
-### 3. `src/app/api/backtest/route.ts` — POST
+### 4. `src/app/api/backtest/route.ts` — POST
 
 - body: `{ from: string; to: string; params: Partial<BacktestParams> }`
 - `data/` 아래 저장된 과거 캔들 JSON을 읽어 `runBacktest`에 넘긴다. 파일이 없으면 **404와 함께 `npm run fetch-history` 안내 메시지**를 반환한다.
 - 백테스트는 수 초 이상 걸릴 수 있다. `maxDuration`을 넉넉히 설정한다.
 - `runtime = 'nodejs'` 고정 (파일 시스템 접근 필요).
 
-### 4. `src/app/api/commentary/route.ts` — POST
+### 5. `src/app/api/commentary/route.ts` — POST
 
 - `@anthropic-ai/sdk`를 그대로 사용한다 (ADR-011). devDependency가 아닌 dependency로 설치.
 - 모델은 `claude-sonnet-4-6`, `max_tokens`는 600 정도.
@@ -77,6 +86,7 @@ npm test        # 기존 테스트 전부 유지
 
 ## 금지사항
 
+- 실측 수수료·유지증거금 조회 실패를 500으로 처리하지 마라. 이유: 읽기 전용 키가 없어도 앱 전체는 기본값으로 동작해야 한다.
 - 라우트 안에서 지표·점수·사이징을 직접 계산하지 마라. 필요하면 `src/lib/`에 함수를 추가하고 테스트를 먼저 써라. 이유: 검증되지 않은 계산에 자본이 걸린다.
 - 주문 실행 엔드포인트를 만들지 마라. 이유: v1은 알림 전용 (ADR-002).
 - Claude에게 진입/청산/수량을 결정하게 하지 마라. 이유: LLM 출력은 백테스트할 수 없다 (ADR-010).

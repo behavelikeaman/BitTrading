@@ -5,7 +5,7 @@
 먼저 아래 파일들을 읽고 프로젝트의 아키텍처와 설계 의도를 파악하라:
 
 - `/docs/PRD.md` (핵심 기능 2 — 포지션 계산기, 기준 수치 표)
-- `/docs/ADR.md` (**ADR-008 손절은 ATR 기반**, **ADR-009 포지션은 리스크 예산에서 역산**)
+- `/docs/ADR.md` (**ADR-008 손절은 ATR 기반**, **ADR-009 포지션은 리스크 예산에서 역산**, **ADR-012 수수료·유지증거금은 거래소 실측값**, **ADR-013 목표는 R배수로 정의**)
 - `/docs/ARCHITECTURE.md`
 - `/CLAUDE.md` (도메인 상수)
 - Step 1의 `src/types/index.ts`, Step 2의 `src/lib/signal/entry.ts` (`Conviction` 타입)
@@ -29,7 +29,8 @@ export interface AccountConfig {
   riskPctHigh: number;       // 확신 시 리스크 예산. 기본 0.02
   riskPctMedium: number;     // 약간의 확신. 기본 0.01
   atrStopMultiple: number;   // 기본 1.2
-  targetNetReturnOnMargin: number; // 증거금 대비 순목표. 기본 0.25
+  targetRMultiple: number;   // 목표 = 손절폭 x 이 배수. 기본 1.38 (ADR-013)
+  feeSource: 'measured' | 'default';  // ADR-012. 화면에 실측/추정 표시용
 }
 
 export interface LadderLeg {
@@ -68,8 +69,16 @@ export function liquidationPrice(input: {
   direction: Direction;
   averageEntryPrice: number;
   leverage: number;
-  maintenanceMarginRate: number;
+  maintenanceMarginRate: number;   // ADR-012: step-margin 구간표에서 읽은 실측값을 우선 사용
 }): number;
+
+// Deepcoin step-margin 구간표에서 명목가에 해당하는 유지증거금률을 고른다.
+// 구간표가 없으면(키 미설정) 기본값을 그대로 반환한다.
+export function resolveMmr(
+  notional: number,
+  tiers: { maxNotional: number; mmr: number }[] | null,
+  fallback: number
+): number;
 
 // 평단에서 수수료까지 회수하는 가격 (사용자 방침: 물타기는 본전 탈출)
 export function breakEvenPrice(input: {
@@ -99,8 +108,11 @@ export function planPosition(input: {
 
 1. 리스크 예산 `R` = `equity * (conviction === 'high' ? riskPctHigh : riskPctMedium)`
 2. 손절폭 `S` = `atr * atrStopMultiple` (가격 단위)
-3. 목표 가격폭 `T` = `entryPrice * (targetNetReturnOnMargin + feeRatePerSide*2*leverage) / leverage`
-   - 검증: 50배·목표 순수익 25%·수수료 0.04%/side → `T / entryPrice ≈ 0.0058` (0.58%)
+3. 목표 가격폭 `T` = `S * targetRMultiple` (**손절폭의 배수. 레버리지와 무관하다 — ADR-013**)
+   - 검증: 손절 0.42%·배수 1.38 → `T / entryPrice ≈ 0.0058` (0.58%)
+   - 화면 표시용으로 증거금 대비 순수익 환산값도 함께 반환한다:
+     `targetNetReturnOnMargin = T/entryPrice * leverage - feeRatePerSide*2*leverage`
+     검증: 50배·수수료 0.04%/side → `≈ 0.25` (25%)
 4. 총명목가 `N` = `R / (S/entryPrice + feeRatePerSide*2)`
 5. 수량 = `N / entryPrice`, 증거금 = `N / leverage`
 6. `breakEvenWinRate` = `(S/entryPrice + feeRatePerSide*2) / (T/entryPrice + S/entryPrice)`
@@ -108,6 +120,7 @@ export function planPosition(input: {
 `warnings`에 담아야 할 경고:
 
 - 청산가가 손절가보다 진입가에 **가까우면** → "청산가가 손절가보다 가깝다. 레버리지를 낮추거나 손절폭을 좁혀라." (ADR-008 위반 상태)
+- `feeSource === 'default'` → "수수료율이 추정치다. 실측값을 불러오면 계산이 정확해진다." (ADR-012)
 - 총증거금 > `equity` → "증거금이 자본금을 초과한다"
 - `breakEvenWinRate > 0.6` → "손익분기 승률 X%. 이 설정으로는 수익을 내기 어렵다."
 - `rewardAtTarget < riskBudget` → "손익비가 1 미만이다"
@@ -154,9 +167,12 @@ export function resetDaily(guard: GuardState): GuardState;
 `liquidation.test.ts`, `sizing.test.ts`, `ladder.test.ts`, `guard.test.ts`. **손계산 기대값을 박아넣어라.** 최소한:
 
 - 청산가: 진입 100,000 / 50배 / MMR 0.5% / 롱 → 98,500 (1.5% 아래). 숏 → 101,500
-- 목표 가격폭: 진입 100,000 / 50배 / 목표 25% / 수수료 0.04% → `takeProfitPrice ≈ 100,580`
+- 목표 가격폭: 진입 100,000 / 손절 0.42% / `targetRMultiple` 1.38 → `takeProfitPrice ≈ 100,580`
+- 증거금 환산: 위 조건 + 50배 + 수수료 0.04%/side → `targetNetReturnOnMargin ≈ 0.25`
 - 손익분기 승률: 손절 0.42% / 목표 0.58% / 수수료 0.08% → `≈ 0.50`
-- 목표를 10%로 낮추면 손익분기 승률이 `≈ 0.714`로 **올라가는지** (PRD 기준 수치 표와 일치)
+- **레버리지 독립성 (ADR-013)**: `leverage`만 50 → 25로 바꿔도 `takeProfitPrice`·`stopPrice`·`totalNotional`이 **변하지 않고** `totalMargin`과 `liquidationPrice`만 변하는지
+- `targetRMultiple`을 낮춰 목표를 0.28%로 만들면 손익분기 승률이 `≈ 0.714`로 **올라가는지** (PRD 기준 수치 표와 일치)
+- 수수료율을 0.04% → 0.06%로 올리면 손익분기 승률이 `≈ 0.519`로 오르는지 (ADR-012)
 - 사이징: equity 5,000 / 리스크 2% / 손절 0.42% / 수수료 0.08% → `riskBudget ≈ 100`, `totalNotional ≈ 20,000`
 - **래더 손실 검증 (가장 중요)**: 물타기 2회 래더를 만들고 각 레그가 손절가에 도달했을 때의 총손실을 직접 합산해 `riskBudget`과 `toBeCloseTo`로 일치하는지 확인한다. 오차 허용은 1 USDT 이내.
 - 래더 가중치 합이 1이 아니면 예외를 던지는지
@@ -191,5 +207,6 @@ npm test        # Step 1~2 테스트 + 이번 리스크 테스트 전부 통과
 - 청산가를 손절가로 사용하지 마라. 이유: 한 트레이드 손실이 증거금 100%가 되고 손익분기 승률이 88.8%로 올라간다 (ADR-008).
 - 래더 각 레그에 단일 진입 손실 공식을 그대로 적용하지 마라. 이유: 레그마다 손절 거리가 달라 총손실이 예산을 초과한다.
 - 수량을 거래소 최소 단위로 반올림한 뒤 리스크 검증을 생략하지 마라. 반올림 후 값으로 손실을 다시 계산해 경고를 갱신하라. 이유: 반올림이 리스크 예산을 넘길 수 있다.
+- 목표를 "증거금 대비 %"로 정의하지 마라. `targetRMultiple`(손절폭 배수)로 정의하고 % 는 환산해서 보여줘라. 이유: 증거금 대비 %는 레버리지에 종속돼, 레버리지를 바꾸는 순간 같은 이름의 목표가 완전히 다른 전략이 된다 (ADR-013).
 - 주문 실행 코드나 거래소 주문 API 호출을 넣지 마라. 이유: v1은 알림 전용 (ADR-002).
 - 백테스트 루프를 여기에 넣지 마라. 이유: Step 4의 범위다.

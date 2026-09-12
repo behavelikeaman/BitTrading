@@ -4,7 +4,7 @@
 
 - `/docs/PRD.md` (핵심 기능 3 — 백테스트, 기준 수치 표)
 - `/docs/ARCHITECTURE.md` (백테스트 데이터 흐름)
-- `/docs/ADR.md` (ADR-007 수수료·슬리피지·펀딩·청산 반영)
+- `/docs/ADR.md` (ADR-007 수수료·슬리피지·펀딩·청산 반영, ADR-013 목표는 R배수)
 - `/CLAUDE.md`
 - Step 4의 `src/lib/backtest/` (`BacktestResult`, `BacktestParams`, `Trade` 타입)
 - Step 6의 `src/app/api/backtest/route.ts`
@@ -17,7 +17,7 @@
 ### 화면 구성
 
 1. **파라미터 패널** — 기간(from/to), 그리고 결과를 크게 바꾸는 값들을 조정 가능하게:
-   - 목표 순수익률 (`targetNetReturnOnMargin`) — 기본 0.25
+   - 목표 R배수 (`targetRMultiple`) — 기본 1.38. 옆에 증거금 대비 환산 % 표시 (ADR-013)
    - ATR 손절 배수 (`atrStopMultiple`) — 기본 1.2
    - 확신/약간의 확신 점수 임계값 (`highConvictionScore`, `mediumConvictionScore`)
    - 리스크 예산 % (`riskPctHigh`, `riskPctMedium`)

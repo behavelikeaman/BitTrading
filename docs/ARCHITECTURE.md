@@ -53,7 +53,7 @@ scripts/
   execute.py                    # Harness step 실행기
 
 data/                           # 다운로드된 과거 캔들 (gitignore)
-docs/                           # PRD / ARCHITECTURE / ADR
+docs/                           # PRD / ARCHITECTURE / ADR / DEEPCOIN-API
 phases/                         # Harness step 정의
 ```
 
@@ -97,3 +97,4 @@ npm run fetch-history          # 로컬에서 Binance 과거 5분봉 -> data/
 - `src/app/api/`는 조립만 한다. 새 계산 로직이 필요하면 `src/lib/`에 함수를 추가하고 테스트를 먼저 쓴다.
 - 클라이언트 컴포넌트는 `src/app/api/*`만 호출한다. `src/services/`를 import 하지 않는다. 이유: 키 노출.
 - 캔들 배열은 항상 **오름차순(과거 -> 최근)**, 마지막 원소는 **확정봉**. `services/`가 미확정봉을 잘라내고 반환한다.
+- **Deepcoin 캔들 응답은 내림차순이다.** `services/deepcoin.ts`가 반드시 뒤집어서 반환한다. 검증된 스펙은 `docs/DEEPCOIN-API.md` 참조.
