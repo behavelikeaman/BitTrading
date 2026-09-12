@@ -94,7 +94,12 @@ Binance `1h`)와 과거 데이터 파일명(`src/lib/data-files.ts`)도 여기�
 2. **캔들 진입 시점에 청산가를 한 번만 계산** — 같은 캔들에서 물타기 레그가 체결되면 평단·청산가가 내려가는데 반영 못 했다. 레그 체결마다 재계산하도록 수정.
 3. **`npm run build`가 테스트 파일을 타입체크하지 않는다** — `npm run typecheck`를 추가했다. AC에 반드시 포함할 것.
 4. **얕은 병합으로 기본값이 날아감** — 백테스트 라우트에서 `account`·`entry`를 각각 따로 병합하도록 수정.
-5. **step 정의의 모델 ID가 구세대였다** — `claude-sonnet-4-6` → `claude-opus-5`. LLM 관련 작업은 `claude-api` 스킬을 먼저 읽을 것.
+5. **Stop hook의 `npm run build`가 개발 서버를 죽였다** — 프로덕션 빌드가
+   dev 서버의 `.next`를 덮어써 `__webpack_modules__[moduleId] is not a function`
+   으로 Internal Server Error가 났다. `next.config.ts`의 `distDir`을
+   `NEXT_DIST_DIR` 환경변수로 분리하고, 검증 빌드는 `.next-verify`에 쓰도록
+   고쳤다. **개발 서버를 켜둔 채 `npm run build`를 같은 디렉토리에 돌리지 마라.**
+6. **step 정의의 모델 ID가 구세대였다** — `claude-sonnet-4-6` → `claude-opus-5`. LLM 관련 작업은 `claude-api` 스킬을 먼저 읽을 것.
 
 ### 테스트 픽스처 주의
 합성 캔들은 `open`이 항상 이전 `close`라 **지정가가 100% 체결되고 손절·청산·물타기 경로를 밟지 않는다.** 각 경로 검증에는 `scenario()` 픽스처(진입 이후 캔들을 직접 지정)를 쓴다.

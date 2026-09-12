@@ -40,7 +40,8 @@
 
 ## 명령어
 npm run dev            # 개발 서버
-npm run build          # 프로덕션 빌드
+npm run build          # 프로덕션 빌드. 개발 서버가 떠 있으면 NEXT_DIST_DIR=.next-verify 를 붙여라
+                       # (같은 .next에 쓰면 dev 서버가 500으로 죽는다)
 npm run typecheck      # tsc --noEmit (build는 테스트 파일을 타입체크하지 않는다)
 npm run lint           # ESLint
 npm run test           # 테스트 (vitest)

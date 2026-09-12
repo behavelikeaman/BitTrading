@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npm run lint 2>&1 && npm run build 2>&1 && npm run test 2>&1"
+            "command": "npm run lint 2>&1 && npm run typecheck 2>&1 && NEXT_DIST_DIR=.next-verify npm run build 2>&1 && npm run test 2>&1"
           }
         ]
       }
