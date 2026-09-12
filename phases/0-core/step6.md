@@ -35,7 +35,8 @@ ADR-012. Deepcoin에서 **실측** 수수료율과 유지증거금 구간표를 
 
 - `services/deepcoin.ts`의 `fetchTradeFee`·`fetchStepMargin`을 호출한다.
 - 키가 없거나 호출이 실패하면 **500이 아니라 200으로** `{ feeSource: 'default', ... }`를 반환한다. 이유: 실측값이 없어도 기본값으로 동작해야 하고, 화면은 "추정치"라고 표시만 하면 된다.
-- 응답: `{ feeSource: 'measured' | 'default'; maker: number; taker: number; mmrTiers: {maxNotional:number; mmr:number}[] | null }`
+- **슬리피지 실측 (ADR-014)**: `fetchFills`로 최근 체결 내역을 받고, `src/lib/measure-slippage.ts`의 `measureSlippage`에 넘겨 편도 슬리피지 중앙값을 구한다. 의도 가격은 각 체결 시각이 속한 5분봉의 시가를 쓴다(시장가 진입 기준). 표본이 부족하거나 키가 없으면 기본값 0.0002를 쓰고 `slippageSource: 'default'`로 표시한다.
+- 응답: `{ feeSource: 'measured' | 'default'; maker: number; taker: number; mmrTiers: {maxNotional:number; mmr:number}[] | null; slippageRate: number; slippageSource: 'measured' | 'default'; slippageSampleCount: number }`
 
 ### 3. `src/app/api/candles/route.ts` — GET
 

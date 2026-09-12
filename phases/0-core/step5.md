@@ -4,7 +4,7 @@
 
 - **`/docs/DEEPCOIN-API.md`** — 검증된 Deepcoin 스펙. 엔드포인트·인증·응답 형태가 전부 여기 있다. **추측하지 말고 이 문서를 따르라.**
 - `/docs/ARCHITECTURE.md` (`src/services/` 경계 규칙 — 지표 계산 금지, 원시 데이터만 반환)
-- `/docs/ADR.md` (ADR-003 Binance 과거·Deepcoin 실시간, ADR-006 확정봉, ADR-011 자체 래퍼 금지, **ADR-012 수수료·유지증거금은 거래소에서 읽는다**)
+- `/docs/ADR.md` (ADR-003 Binance 과거·Deepcoin 실시간, ADR-006 확정봉, ADR-011 자체 래퍼 금지, **ADR-012 수수료·유지증거금은 거래소에서 읽는다**, **ADR-014 슬리피지는 실제 체결에서 측정**)
 - `/CLAUDE.md`, `/.env.example`
 - Step 1의 `src/types/index.ts` (`Candle` 타입)
 
@@ -44,6 +44,11 @@ export async function fetchFundingRate(instId?: string): Promise<number>;
 // ADR-012 — 추정치 대신 실측값을 읽는다. 키가 없으면 null을 반환하고 throw 하지 않는다.
 export async function fetchTradeFee(instId?: string): Promise<{ maker: number; taker: number } | null>;
 export async function fetchStepMargin(instId?: string): Promise<{ tiers: { maxNotional: number; mmr: number }[] } | null>;
+
+// ADR-014 — 실제 체결 내역. 슬리피지 실측용. 키가 없으면 null.
+export async function fetchFills(input?: { instId?: string; limit?: number }): Promise<
+  { ts: number; side: 'buy' | 'sell'; fillPrice: number; qty: number; fee: number }[] | null
+>;
 ```
 
 **반드시 지킬 것 — 이 세 가지가 조용히 틀리는 지점이다:**
@@ -90,12 +95,28 @@ export function parseDeepcoinCandles(rows: string[][], intervalMs: number, nowMs
 - 빈 배열 입력 → 빈 배열 반환, 예외 없음
 - `docs/DEEPCOIN-API.md`의 실제 응답 예시를 픽스처로 그대로 넣어 검증
 
+### 5. `src/lib/measure-slippage.ts` — 슬리피지 실측 (ADR-014)
+
+순수 함수로 두고 TDD로 작성한다. 체결 내역과 의도 가격을 비교해 편도 슬리피지를 구한다.
+
+```ts
+export function measureSlippage(
+  fills: { ts: number; side: 'buy' | 'sell'; fillPrice: number; qty: number }[],
+  intendedPrices: { ts: number; price: number }[]
+): { medianRate: number; sampleCount: number } | null;
+```
+
+- 슬리피지는 항상 **불리한 방향을 양수**로 정의한다: 매수는 `(체결가 - 의도가)/의도가`, 매도는 `(의도가 - 체결가)/의도가`.
+- 평균이 아니라 **중앙값**을 쓴다. 이유: 급변동 구간의 이상 체결 한두 건이 평균을 왜곡한다.
+- 표본이 `10`건 미만이면 `null`을 반환한다. 이유: 표본이 적으면 추정치보다 나을 게 없다.
+- 테스트: 매수·매도 각각 불리한 체결이 양수로 나오는지, 유리한 체결이 음수로 나오는지, 이상치가 중앙값에 영향을 거의 안 주는지, 표본 부족 시 `null`인지.
+
 ## Acceptance Criteria
 
 ```bash
 npm run build   # 타입 에러 없음
 npm run lint
-npm test        # 기존 테스트 + parse-deepcoin 테스트 통과
+npm test        # 기존 테스트 + parse-deepcoin·measure-slippage 테스트 통과
 ```
 
 > 실제 네트워크 호출은 AC에 포함하지 않는다. 이 프로젝트의 CI/클라우드 환경에서는 거래소 도메인이 차단된다 (ADR-005).
@@ -109,6 +130,7 @@ npm test        # 기존 테스트 + parse-deepcoin 테스트 통과
    - 미확정봉을 잘라내는가? (ADR-006)
    - 공개 엔드포인트가 키 없이 동작하는가?
    - 키를 `process.env`로만 읽는가? 하드코딩된 키가 없는가?
+   - `measureSlippage`가 불리한 방향을 양수로, 중앙값으로 계산하는가? 표본 부족 시 `null`인가?
    - 주문·출금 엔드포인트를 호출하는 코드가 없는가? (ADR-002)
 3. `phases/0-core/index.json`의 step 5를 업데이트한다 (completed / error / blocked).
 

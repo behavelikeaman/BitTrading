@@ -86,13 +86,16 @@ signature = base64( HMAC-SHA256( secret, payload ) )
 | 레버리지 정보 | `GET /deepcoin/account/leverage-info` |
 | 잔고 | `GET /deepcoin/account/balances` |
 | 포지션 | `GET /deepcoin/account/positions` |
+| **실제 체결 내역 (슬리피지 실측용)** | `GET /deepcoin/trade/fills` |
+| 과거 포지션 | `GET /deepcoin/account/positions-history` |
 
 **주문 관련 엔드포인트(`/deepcoin/trade/order` 등)는 v1에서 호출하지 않는다 (ADR-002).**
 
 ## 이 프로젝트에 중요한 두 엔드포인트
 
-`GET /deepcoin/account/trade-fee`와 `GET /deepcoin/market/step-margin`은
-수수료율과 유지증거금률을 **추정하지 않고 거래소에서 직접 읽게** 해준다 (ADR-012).
+`GET /deepcoin/account/trade-fee`, `GET /deepcoin/market/step-margin`,
+`GET /deepcoin/trade/fills`는 수수료율·유지증거금률·**슬리피지**를
+**추정하지 않고 거래소에서 직접 읽거나 실측하게** 해준다 (ADR-012, ADR-014).
 이 두 값은 목표 가격폭·청산가·손익분기 승률을 직접 결정하므로 추정치를 쓰면 안 된다.
 
 ## WebSocket (v1 범위 밖, 참고)

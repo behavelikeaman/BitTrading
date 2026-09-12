@@ -5,7 +5,7 @@
 먼저 아래 파일들을 읽고 프로젝트의 아키텍처와 설계 의도를 파악하라:
 
 - `/docs/PRD.md` (핵심 기능 3 — 백테스트, 기준 수치 표)
-- `/docs/ADR.md` (**ADR-001 시그널 함수 공유**, **ADR-007 수수료·슬리피지·펀딩·청산 반영**, ADR-006 확정봉)
+- `/docs/ADR.md` (**ADR-001 시그널 함수 공유**, **ADR-007 수수료·슬리피지·펀딩·청산 반영**, ADR-006 확정봉, **ADR-014 슬리피지 실측**, **ADR-015 시장가·지정가 비교**)
 - `/docs/ARCHITECTURE.md` (백테스트 데이터 흐름)
 - `/CLAUDE.md` (룩어헤드 금지 CRITICAL 규칙)
 - Step 1 `src/lib/indicators/`, Step 2 `src/lib/signal/`, Step 3 `src/lib/risk/` **전체**
@@ -39,7 +39,10 @@ export interface BacktestParams {
   entry: EntryConfig;
   ladderHigh: LadderPlanInput;
   ladderMedium: LadderPlanInput;
-  slippageRate: number;        // 명목가 대비 편도. 기본 0.0002
+  entryType: 'market' | 'limit';  // ADR-015. 기본 'market' (사용자는 시장가 매매)
+  limitValidBars: number;         // entryType='limit'일 때 지정가 유효 캔들 수. 기본 3
+  slippageRate: number;           // 명목가 대비 편도. 기본 0.0002 — 추정치 (ADR-014)
+  slippageSource: 'measured' | 'default';  // 리포트에 추정/실측 표시
   fundingRatePerInterval: number; // 8시간당. 기본 0.0001
   maxHoldBars: number;         // 타임아웃 청산. 기본 36 (3시간)
 }
@@ -56,6 +59,8 @@ export interface BacktestResult {
   totalFunding: number;
   finalEquity: number;
   liquidationCount: number;
+  signalCount: number;         // 진입 신호가 난 횟수
+  fillRate: number;            // signalCount 대비 실제 체결된 비율. entryType='limit'의 역선택 크기
   equityCurve: { time: number; equity: number }[];
 }
 ```
@@ -76,7 +81,10 @@ export function runBacktest(input: {
 1. 확정봉 `i`에 대해 지표와 시그널을 계산할 때 **`candles.slice(0, i+1)`만** 넘긴다. `i+1` 이후 캔들을 절대 참조하지 마라.
 2. 15분봉은 `candles5m[i].openTime` **이하로 이미 종료된** 15분봉만 넘긴다. 아직 진행 중인 15분봉을 넘기면 미래 정보가 샌다.
 3. `evaluateEntry`에는 `nowMs = candles5m[i].openTime`을 넘긴다 (세션 필터가 백테스트에서도 동일하게 동작해야 한다).
-4. 진입 신호가 나면 **체결은 캔들 `i+1`의 시가**부터다. 슬리피지를 불리한 방향으로 적용한다 (롱은 시가 + slippage, 숏은 시가 − slippage).
+4. 진입 신호가 나면 `entryType`에 따라 체결을 결정한다 (ADR-015):
+   - **`'market'`**: 캔들 `i+1`의 **시가**에 무조건 체결. 슬리피지를 **불리한 방향**으로 적용한다 (롱은 시가 + slippage, 숏은 시가 − slippage). 테이커 수수료.
+   - **`'limit'`**: 캔들 `i`의 **종가**에 지정가를 건다. 캔들 `i+1`부터 `limitValidBars`개 안에 가격이 그 지정가에 닿아야(롱은 `low <= limitPrice`, 숏은 `high >= limitPrice`) 체결된다. 슬리피지 0, 메이커 수수료. **닿지 않으면 주문을 취소하고 트레이드를 만들지 않는다.**
+   - 두 경우 모두 `signalCount`를 증가시키고, 실제 체결된 경우만 트레이드를 만든다. `fillRate = trades.length / signalCount`.
 5. 포지션 보유 중 각 캔들에서 도달 판정을 하되, 한 캔들 안에서 손절과 익절이 모두 닿을 수 있다. 이때는 **항상 손절이 먼저 체결된 것으로 처리한다.** 이유: 5분봉 안의 순서를 알 수 없으므로 낙관적 가정은 백테스트를 부풀린다.
 6. 도달 판정 우선순위: **청산 > 손절 > 물타기 체결 > 익절**. 청산가에 캔들 저가(롱)·고가(숏)가 닿으면 즉시 청산 처리하고 해당 포지션 증거금 전액을 손실로 기록한다.
 7. 물타기 레그는 가격이 레그 가격에 닿아야만 체결된다. 닿지 않고 익절·손절되면 미체결 레그는 `Trade.legs`에 넣지 않는다.
@@ -107,6 +115,10 @@ export function computeMetrics(trades: Trade[], startingEquity: number): Omit<Ba
 - 물타기 가격에 닿지 않은 트레이드 → `legs.length === 1`
 - 8시간 경계를 넘겨 보유한 트레이드 → `funding !== 0`
 - `maxHoldBars` 초과 → `exitReason === 'timeout'`
+- **`entryType: 'market'`에서 슬리피지가 불리한 방향으로 적용되는지** — 롱 진입가 > 시가, 숏 진입가 < 시가
+- **`entryType: 'limit'`에서 가격이 지정가에 닿지 않으면 트레이드가 안 생기는지** — `signalCount > 0`인데 `trades.length === 0`이고 `fillRate === 0`
+- **`entryType: 'limit'`에서 `limitValidBars` 안에 닿으면 체결되고 슬리피지가 0인지**
+- 같은 캔들 배열을 `'market'`과 `'limit'`으로 각각 돌렸을 때 `signalCount`는 같고 `fillRate`만 다른지
 - 3연속 손실 후 서킷브레이커가 걸려 다음 신호가 무시되는지
 - 신호가 전혀 없는 횡보 캔들 → `totalTrades === 0`, 예외 없음
 - `computeMetrics([], 5000)` → 전 지표 0, 예외 없음
@@ -138,6 +150,8 @@ npm test        # Step 1~3 테스트 + 이번 백테스트 테스트 전부 통�
 - 시그널·사이징 로직을 백테스트용으로 다시 구현하지 마라. 이유: 재구현 드리프트가 "백테스트는 되는데 실전은 안 되는" 1순위 원인이다 (ADR-001).
 - 캔들 `i`의 신호를 캔들 `i`의 종가로 체결하지 마라. 이유: 종가는 캔들이 끝나야 확정되므로 그 가격에 진입할 수 없다. `i+1` 시가를 써라.
 - 한 캔들에서 손절·익절이 모두 닿을 때 익절을 택하지 마라. 이유: 낙관적 가정이 백테스트를 부풀린다.
-- 수수료·슬리피지·펀딩을 생략하거나 "나중에 추가"로 미루지 마라. 이유: 왕복 수수료 0.08%는 목표 0.58%의 14%다. 빼고 돌린 결과는 의사결정에 쓸 수 없다 (ADR-007).
+- 수수료·슬리피지·펀딩을 생략하거나 "나중에 추가"로 미루지 마라. 이유: 사용자는 시장가로 매매하므로 왕복 마찰이 수수료 0.08% + 슬리피지다. 편도 슬리피지 0.02%만 더해도 손익분기 승률이 50.0%에서 54.0%로 4%p 오른다. 빼고 돌린 결과는 의사결정에 쓸 수 없다 (ADR-007, ADR-014).
+- `entryType: 'limit'`에서 미체결 신호를 트레이드로 만들지 마라. 이유: 지정가의 핵심 비용은 수수료가 아니라 **놓친 트레이드**이고, 그걸 체결로 세면 지정가가 실제보다 좋아 보인다 (ADR-015).
+- 슬리피지를 유리한 방향으로 적용하지 마라. 시장가는 항상 불리하게 체결된다.
 - 청산 판정을 생략하지 마라. 이유: 50배에서 이미 사라졌을 계좌가 백테스트에서 살아남아 전략이 좋아 보인다.
 - 외부 API를 호출하거나 파일을 읽지 마라. 캔들은 인자로 받는다. 이유: `src/lib/`는 순수 함수다.
