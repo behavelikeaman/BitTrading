@@ -19,7 +19,7 @@ export function computeMetrics(
     return {
       totalTrades: 0,
       winRate: 0,
-      profitFactor: 0,
+      profitFactor: null,
       expectancy: 0,
       maxDrawdown: 0,
       maxConsecutiveLosses: 0,
@@ -75,8 +75,9 @@ export function computeMetrics(
   return {
     totalTrades: trades.length,
     winRate: wins / trades.length,
-    // 손실이 전혀 없으면 무한대. UI가 별도 표기한다.
-    profitFactor: grossLoss === 0 ? Number.POSITIVE_INFINITY : grossProfit / grossLoss,
+    // 손실이 없으면 손익비가 정의되지 않는다. Infinity는 JSON에서 null이
+    // 되어버리므로 명시적으로 null을 반환하고 화면이 ∞로 그린다.
+    profitFactor: grossLoss === 0 ? null : grossProfit / grossLoss,
     expectancy: totalNet / trades.length,
     maxDrawdown,
     maxConsecutiveLosses,

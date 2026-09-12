@@ -5,6 +5,7 @@ import {
   formatPrice,
   formatQty,
   formatRate,
+  formatProfitFactor,
   formatRatio,
   formatSignedUsd,
   formatTime,
@@ -73,5 +74,17 @@ describe('formatTime / formatDateTime', () => {
   it('값이 없으면 대시다', () => {
     expect(formatTime(null)).toBe('—');
     expect(formatDateTime(undefined)).toBe('—');
+  });
+});
+
+describe('formatProfitFactor', () => {
+  it('손실이 없어 null이면 무한대 기호로 그린다', () => {
+    expect(formatProfitFactor(null, true)).toBe('∞');
+  });
+  it('트레이드가 없으면 대시다', () => {
+    expect(formatProfitFactor(null, false)).toBe('—');
+  });
+  it('일반 값은 소수점 2자리다', () => {
+    expect(formatProfitFactor(2.5, true)).toBe('2.50');
   });
 });

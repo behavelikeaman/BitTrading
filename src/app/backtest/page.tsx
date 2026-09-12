@@ -1,0 +1,319 @@
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
+import { BacktestReport } from '@/components/BacktestReport';
+import { useLocalStorage } from '@/lib/use-local-storage';
+import { formatPct, formatUsd } from '@/lib/format';
+import type { BacktestResult } from '@/types';
+
+interface Params {
+  from: string;
+  to: string;
+  equity: number;
+  leverage: number;
+  feeRatePerSide: number;
+  slippageRatePerSide: number;
+  riskPctHigh: number;
+  riskPctMedium: number;
+  atrStopMultiple: number;
+  targetRMultiple: number;
+  highConvictionScore: number;
+  mediumConvictionScore: number;
+  entryType: 'market' | 'limit';
+  limitValidBars: number;
+  maxHoldBars: number;
+}
+
+const DEFAULTS: Params = {
+  from: '2025-01-01',
+  to: '2025-06-30',
+  equity: 5000,
+  leverage: 50,
+  feeRatePerSide: 0.0004,
+  slippageRatePerSide: 0.0002,
+  riskPctHigh: 0.02,
+  riskPctMedium: 0.01,
+  atrStopMultiple: 1.2,
+  targetRMultiple: 1.38,
+  highConvictionScore: 6,
+  mediumConvictionScore: 4,
+  entryType: 'market',
+  limitValidBars: 3,
+  maxHoldBars: 36,
+};
+
+/**
+ * 손익분기 승률 = (손절폭 + 왕복마찰) / (목표폭 + 손절폭).
+ *
+ * 목표를 R배수로 정의했으므로 손절폭을 1로 두면 ATR 없이도 계산된다.
+ * 다만 마찰은 가격 대비 비율이라 손절폭의 가격 비율이 필요하다. 여기서는
+ * 기준값 0.42%(ATR 1.2배)를 쓰고, 실제 값은 대시보드 주문 티켓이 낸다.
+ */
+function theoreticalBreakEven(p: Params): number {
+  const stopPct = 0.0042 * (p.atrStopMultiple / 1.2);
+  const targetPct = stopPct * p.targetRMultiple;
+  const friction = (p.feeRatePerSide + p.slippageRatePerSide) * 2;
+  return (stopPct + friction) / (targetPct + stopPct);
+}
+
+function buildBody(p: Params, entryType: 'market' | 'limit') {
+  return {
+    from: p.from,
+    to: p.to,
+    params: {
+      entryType,
+      limitValidBars: p.limitValidBars,
+      maxHoldBars: p.maxHoldBars,
+      account: {
+        equity: p.equity,
+        leverage: p.leverage,
+        feeRatePerSide: p.feeRatePerSide,
+        slippageRatePerSide: p.slippageRatePerSide,
+        riskPctHigh: p.riskPctHigh,
+        riskPctMedium: p.riskPctMedium,
+        atrStopMultiple: p.atrStopMultiple,
+        targetRMultiple: p.targetRMultiple,
+      },
+      entry: {
+        highConvictionScore: p.highConvictionScore,
+        mediumConvictionScore: p.mediumConvictionScore,
+      },
+    },
+  };
+}
+
+function Field({
+  label,
+  value,
+  step,
+  onChange,
+  type = 'number',
+}: {
+  label: string;
+  value: string | number;
+  step?: number;
+  onChange: (v: string) => void;
+  type?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-[10px] uppercase tracking-wide text-neutral-500">
+        {label}
+      </span>
+      <input
+        type={type}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-sm text-neutral-200"
+      />
+    </label>
+  );
+}
+
+export default function BacktestPage() {
+  const [params, setParams] = useLocalStorage('bt.backtest', DEFAULTS);
+  const [result, setResult] = useState<BacktestResult | null>(null);
+  const [compare, setCompare] = useState<{
+    market: BacktestResult;
+    limit: BacktestResult;
+  } | null>(null);
+  const [error, setError] = useState<{ message: string; hint?: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+
+  const num = (key: keyof Params) => (v: string) => {
+    const n = Number(v);
+    if (Number.isFinite(n)) setParams({ ...params, [key]: n });
+  };
+
+  const run = async (mode: 'single' | 'compare') => {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    setCompare(null);
+    const started = Date.now();
+    const timer = setInterval(() => setElapsed(Date.now() - started), 200);
+
+    try {
+      const call = async (entryType: 'market' | 'limit') => {
+        const res = await fetch('/api/backtest', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(buildBody(params, entryType)),
+        });
+        const body = (await res.json()) as
+          | BacktestResult
+          | { error: string; hint?: string };
+        if (!res.ok) throw body as { error: string; hint?: string };
+        return body as BacktestResult;
+      };
+
+      if (mode === 'single') {
+        setResult(await call(params.entryType));
+      } else {
+        const [market, limit] = await Promise.all([call('market'), call('limit')]);
+        setCompare({ market, limit });
+      }
+    } catch (e) {
+      const err = e as { error?: string; hint?: string; message?: string };
+      setError({
+        message: err.error ?? err.message ?? '백테스트 실패',
+        hint: err.hint,
+      });
+    } finally {
+      clearInterval(timer);
+      setLoading(false);
+    }
+  };
+
+  const breakEven = theoreticalBreakEven(params);
+
+  return (
+    <main className="mx-auto max-w-5xl space-y-4 p-4">
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-bold">백테스트</h1>
+          <p className="text-xs text-neutral-500">
+            이 규칙이 과거에 실제로 돈이 됐는지 확인한다
+          </p>
+        </div>
+        <Link href="/" className="text-xs text-neutral-400 hover:text-neutral-200">
+          ← 대시보드
+        </Link>
+      </header>
+
+      <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
+        <h2 className="mb-3 text-sm font-semibold text-neutral-300">파라미터</h2>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Field label="시작일" type="date" value={params.from} onChange={(v) => setParams({ ...params, from: v })} />
+          <Field label="종료일" type="date" value={params.to} onChange={(v) => setParams({ ...params, to: v })} />
+          <Field label="자본금" value={params.equity} step={100} onChange={num('equity')} />
+          <Field label="레버리지" value={params.leverage} step={1} onChange={num('leverage')} />
+          <Field label="목표 R배수" value={params.targetRMultiple} step={0.01} onChange={num('targetRMultiple')} />
+          <Field label="ATR 손절 배수" value={params.atrStopMultiple} step={0.1} onChange={num('atrStopMultiple')} />
+          <Field label="편도 수수료" value={params.feeRatePerSide} step={0.0001} onChange={num('feeRatePerSide')} />
+          <Field label="편도 슬리피지" value={params.slippageRatePerSide} step={0.0001} onChange={num('slippageRatePerSide')} />
+          <Field label="리스크 (확신)" value={params.riskPctHigh} step={0.005} onChange={num('riskPctHigh')} />
+          <Field label="리스크 (약간)" value={params.riskPctMedium} step={0.005} onChange={num('riskPctMedium')} />
+          <Field label="확신 점수 기준" value={params.highConvictionScore} step={1} onChange={num('highConvictionScore')} />
+          <Field label="약간 점수 기준" value={params.mediumConvictionScore} step={1} onChange={num('mediumConvictionScore')} />
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-wide text-neutral-500">
+              진입 방식
+            </span>
+            <select
+              value={params.entryType}
+              onChange={(e) =>
+                setParams({ ...params, entryType: e.target.value as 'market' | 'limit' })
+              }
+              className="w-full rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-sm text-neutral-200"
+            >
+              <option value="market">시장가</option>
+              <option value="limit">지정가</option>
+            </select>
+          </label>
+          <Field label="지정가 유효 봉" value={params.limitValidBars} step={1} onChange={num('limitValidBars')} />
+          <Field label="최대 보유 봉" value={params.maxHoldBars} step={1} onChange={num('maxHoldBars')} />
+        </div>
+
+        <p className="mt-3 text-xs text-neutral-500">
+          이 설정의 이론 손익분기 승률{' '}
+          <span className="text-neutral-200">{formatPct(breakEven)}</span> · 왕복 총마찰{' '}
+          {formatPct((params.feeRatePerSide + params.slippageRatePerSide) * 2, 4)} (증거금 대비{' '}
+          {formatPct((params.feeRatePerSide + params.slippageRatePerSide) * 2 * params.leverage)})
+        </p>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void run('single')}
+            disabled={loading}
+            className="rounded bg-neutral-200 px-3 py-1.5 text-sm font-semibold text-neutral-900 hover:bg-white disabled:opacity-40"
+          >
+            {loading ? `실행 중… ${(elapsed / 1000).toFixed(1)}s` : '실행'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void run('compare')}
+            disabled={loading}
+            className="rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-900 disabled:opacity-40"
+          >
+            시장가 vs 지정가 비교
+          </button>
+        </div>
+      </section>
+
+      {error !== null && (
+        <section className="rounded-lg border border-[var(--color-warn)]/50 bg-[var(--color-warn)]/10 p-4">
+          <p className="text-sm text-[var(--color-warn)]">{error.message}</p>
+          {error.hint !== undefined && (
+            <>
+              <p className="mt-2 text-xs text-neutral-400">
+                과거 데이터를 먼저 내려받아야 한다 (로컬에서 실행):
+              </p>
+              <code className="mt-1 block select-all rounded bg-neutral-900 px-2 py-1.5 text-xs text-neutral-200">
+                {error.hint}
+              </code>
+            </>
+          )}
+        </section>
+      )}
+
+      {compare !== null && (
+        <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-neutral-300">
+            시장가 vs 지정가 (ADR-015)
+          </h2>
+          <table className="w-full text-sm">
+            <thead className="text-neutral-500">
+              <tr>
+                <th className="py-1 text-left text-xs">항목</th>
+                <th className="py-1 text-right text-xs">시장가</th>
+                <th className="py-1 text-right text-xs">지정가</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ['신호 수', String(compare.market.signalCount), String(compare.limit.signalCount)],
+                ['체결률', formatPct(compare.market.fillRate), formatPct(compare.limit.fillRate)],
+                ['트레이드', String(compare.market.totalTrades), String(compare.limit.totalTrades)],
+                ['승률', formatPct(compare.market.winRate), formatPct(compare.limit.winRate)],
+                [
+                  '순손익',
+                  formatUsd(compare.market.finalEquity - params.equity),
+                  formatUsd(compare.limit.finalEquity - params.equity),
+                ],
+                ['총 수수료', formatUsd(compare.market.totalFees), formatUsd(compare.limit.totalFees)],
+                [
+                  '청산',
+                  `${compare.market.liquidationCount}회`,
+                  `${compare.limit.liquidationCount}회`,
+                ],
+              ].map(([label, a, b]) => (
+                <tr key={label} className="border-t border-neutral-900">
+                  <td className="py-1.5 text-neutral-400">{label}</td>
+                  <td className="py-1.5 text-right text-neutral-200">{a}</td>
+                  <td className="py-1.5 text-right text-neutral-200">{b}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-3 text-xs text-neutral-500">
+            지정가는 수수료가 싸지만 되돌림을 기다리다 가장 크게 달아난 트레이드를
+            놓친다. 체결률과 순손익을 함께 봐야 그 역선택 크기가 보인다.
+          </p>
+        </section>
+      )}
+
+      {result !== null && (
+        <BacktestReport
+          result={result}
+          breakEvenWinRate={breakEven}
+          startingEquity={params.equity}
+        />
+      )}
+    </main>
+  );
+}

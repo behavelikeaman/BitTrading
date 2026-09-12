@@ -2,7 +2,8 @@
   "phases": [
     {
       "dir": "0-core",
-      "status": "pending"
+      "status": "completed",
+      "completed_at": "2026-09-12T17:34:07+0900"
     }
   ]
 }

@@ -69,8 +69,12 @@
     {
       "step": 8,
       "name": "backtest-ui",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-12T17:34:07+0900",
+      "completed_at": "2026-09-12T17:34:07+0900",
+      "summary": "백테스트 화면. src/app/backtest/page.tsx + src/components/BacktestReport.tsx. 파라미터 패널: 기간·자본·레버리지·목표 R배수·ATR 손절 배수·수수료·슬리피지·리스크 %·확신 점수 기준·진입 방식(market|limit)·지정가 유효 봉·최대 보유 봉. localStorage 저장. 패널 하단에 이 설정의 이론 손익분기 승률과 왕복 총마찰(명목가·증거금 대비)을 실시간 표시. 리포트 최상단은 \"실제 승률 vs 손익분기 승률\"을 크게 나란히 놓고, 미달이면 붉은 테두리와 함께 \"이 설정으로는 장기적으로 손실이다\"를 명시한다 — 이 화면이 답해야 할 질문이다. 요약 카드 12종: 트레이드 수·체결률(신호 수 병기)·순손익·최종자본·손익비·기대값·MDD·최대연속손실·총 수수료(총이익 대비 % 병기)·총 펀딩·청산 횟수(1회 이상이면 빨강)·총이익. \"시장가 vs 지정가 비교\" 버튼으로 같은 기간·파라미터를 양쪽으로 돌려 신호 수·체결률·승률·순손익·수수료·청산을 나란히 표시한다(ADR-015). 트레이드 목록은 진입시각·방향·점수·평단·청산가·사유·순손익, 청산은 빨강 강조. 데이터 없으면 404의 hint를 복사 가능한 코드 블록으로 안내한다. 클라이언트는 /api/backtest만 호출한다. 버그 수정(end-to-end 검증에서 발견): computeMetrics가 손실 0일 때 Number.POSITIVE_INFINITY를 반환했는데 JSON.stringify가 이를 null로 바꿔 화면에 무한대가 아니라 \"—\"로 표시됐다. profitFactor 타입을 number|null로 바꾸고 null을 \"손실 없음\"으로 정의했으며, formatProfitFactor(value, hasTrades)로 트레이드 0건(대시)과 무한대(∞)를 구분한다. JSON 왕복 후 값이 보존되는지 테스트로 고정했다. 합성 캔들 580개로 /backtest 렌더 200, 시장가·지정가 백테스트 32트레이드 실행을 end-to-end 확인한 뒤 데이터를 삭제했다. (합성 픽스처는 승률 100%·시장가와 지정가 동일이 나오는데, 이는 캔들의 open이 항상 이전 close라 생기는 픽스처 특성이며 전략 성능과 무관하다.) tsconfig.tsbuildinfo를 gitignore에 추가했다. 테스트 196개, build/lint 통과."
     }
   ],
-  "created_at": "2026-09-12T16:30:53+0900"
+  "created_at": "2026-09-12T16:30:53+0900",
+  "completed_at": "2026-09-12T17:34:07+0900"
 }

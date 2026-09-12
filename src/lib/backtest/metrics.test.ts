@@ -27,7 +27,7 @@ describe('computeMetrics — 빈 입력', () => {
     const m = computeMetrics([], 5000);
     expect(m.totalTrades).toBe(0);
     expect(m.winRate).toBe(0);
-    expect(m.profitFactor).toBe(0);
+    expect(m.profitFactor).toBeNull();
     expect(m.expectancy).toBe(0);
     expect(m.maxDrawdown).toBe(0);
     expect(m.finalEquity).toBe(5000);
@@ -54,10 +54,16 @@ describe('computeMetrics — 기본 지표', () => {
     expect(computeMetrics(trades, 5000).finalEquity).toBeCloseTo(5100, 10);
   });
 
-  it('손실이 하나도 없으면 손익비는 무한대다', () => {
-    expect(computeMetrics([trade(10), trade(20)], 5000).profitFactor).toBe(
-      Number.POSITIVE_INFINITY,
-    );
+  it('손실이 하나도 없으면 손익비는 null이다 (JSON 직렬화 안전)', () => {
+    expect(computeMetrics([trade(10), trade(20)], 5000).profitFactor).toBeNull();
+  });
+
+  it('profitFactor가 JSON 왕복 후에도 보존된다', () => {
+    // Infinity는 JSON.stringify에서 null이 되어 "무한대"와 "값 없음"이
+    // 구분되지 않는다. null을 쓰면 왕복해도 의미가 유지된다.
+    const m = computeMetrics([trade(10), trade(20)], 5000);
+    const roundTripped = JSON.parse(JSON.stringify(m)) as typeof m;
+    expect(roundTripped.profitFactor).toBe(m.profitFactor);
   });
 });
 

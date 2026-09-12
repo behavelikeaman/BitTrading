@@ -181,7 +181,14 @@ export interface BacktestResult {
   trades: Trade[];
   totalTrades: number;
   winRate: number;
-  profitFactor: number;
+  /**
+   * 총이익 / |총손실|. 손실 트레이드가 하나도 없으면 null이다.
+   *
+   * Infinity를 쓰면 JSON 직렬화에서 조용히 null이 되어 화면에 "—"로
+   * 표시된다. 무한대인지 값이 없는 것인지 구분되지 않으므로 명시적으로
+   * null을 쓰고 화면에서 ∞로 그린다.
+   */
+  profitFactor: number | null;
   /** 트레이드당 평균 순손익 (USDT) */
   expectancy: number;
   /** 자본 대비 최대 낙폭 비율 */

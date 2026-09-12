@@ -73,9 +73,25 @@ export function formatDateTime(ms: number | null | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/** 손익비 등 무한대가 나올 수 있는 값 */
+/** 일반 비율. 소수점 2자리 */
 export function formatRatio(value: number | null | undefined): string {
   if (typeof value === 'number' && value === Number.POSITIVE_INFINITY) return '∞';
+  if (!guard(value)) return EMPTY;
+  return value.toFixed(2);
+}
+
+/**
+ * 손익비 전용. null은 "손실이 없어 정의되지 않음"이므로 ∞로 그린다.
+ *
+ * 트레이드가 0건일 때도 null이지만, 그 경우 화면에 트레이드 목록 자체가
+ * 비어 있으므로 혼동되지 않는다.
+ */
+export function formatProfitFactor(
+  value: number | null | undefined,
+  hasTrades: boolean,
+): string {
+  if (!hasTrades) return EMPTY;
+  if (value === null || value === undefined) return '∞';
   if (!guard(value)) return EMPTY;
   return value.toFixed(2);
 }
