@@ -29,8 +29,8 @@ import {
   statePath,
 } from '../src/services/paper-store';
 import { fetchFundingRate, fetchRecentCandles } from '../src/services/deepcoin';
+import { parseTimeframe, timeframeSpec } from '../src/lib/timeframe';
 
-const MS_5M = 300_000;
 const MS_DAY = 24 * 60 * 60 * 1000;
 const MAX_BACKOFF_MS = 5 * 60 * 1000;
 const FAILURE_ALERT_THRESHOLD = 10;
@@ -39,6 +39,7 @@ interface Args {
   reset: boolean;
   equity: number;
   intervalSec: number;
+  timeframe: '5m' | '15m';
   help: boolean;
 }
 
@@ -53,6 +54,7 @@ function parseArgs(argv: string[]): Args {
     reset: argv.includes('--reset'),
     equity: Number.isFinite(equity) ? equity : DEFAULT_ACCOUNT.equity,
     intervalSec: Number.isFinite(intervalSec) ? Math.max(5, intervalSec) : 20,
+    timeframe: parseTimeframe(get('timeframe')),
     help: argv.includes('--help') || argv.includes('-h'),
   };
 }
@@ -72,10 +74,11 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
   if (args.help) {
-    log('사용법: npm run paper -- [--reset] [--equity 5000] [--interval 20]');
-    log('  --reset     기존 상태를 지우고 새로 시작');
-    log('  --equity    시작 자본 (USDT)');
-    log('  --interval  폴링 간격 (초, 최소 5)');
+    log('사용법: npm run paper -- [--reset] [--equity 5000] [--interval 20] [--timeframe 5m|15m]');
+    log('  --reset      기존 상태를 지우고 새로 시작');
+    log('  --equity     시작 자본 (USDT)');
+    log('  --interval   폴링 간격 (초, 최소 5)');
+    log('  --timeframe  기준 봉 (5m 또는 15m)');
     return;
   }
 
@@ -101,8 +104,14 @@ async function main(): Promise<void> {
   log('    이 도구의 목적은 수익 확인이 아니라 백테스트와의 정합성 검증이다.');
   log('');
 
+  const spec = timeframeSpec(args.timeframe);
+  log(`기준 봉 ${spec.label} (상위 ${spec.higher})`);
+  log('');
+
   const execConfig = toExecutionConfig({
     ...DEFAULT_BACKTEST_PARAMS,
+    timeframe: args.timeframe,
+    maxHoldBars: spec.defaultMaxHoldBars,
     account: { ...DEFAULT_ACCOUNT, equity: state.equity },
     entry: DEFAULT_ENTRY_CONFIG,
   });
@@ -118,8 +127,8 @@ async function main(): Promise<void> {
   while (!stopping) {
     try {
       const [candles5m, candles15m, fundingRate] = await Promise.all([
-        fetchRecentCandles({ bar: '5m', limit: 300 }),
-        fetchRecentCandles({ bar: '15m', limit: 200 }),
+        fetchRecentCandles({ bar: spec.primary, limit: 300 }),
+        fetchRecentCandles({ bar: spec.higher, limit: 200 }),
         fetchFundingRate().catch(() => 0),
       ]);
       consecutiveFailures = 0;
@@ -164,7 +173,7 @@ async function main(): Promise<void> {
         if (state.position === null && state.pending === null) {
           const upTo = candles5m.filter((c) => c.openTime <= candle.openTime);
           const htfUpTo = candles15m.filter(
-            (c) => c.openTime + 900_000 <= candle.openTime + MS_5M,
+            (c) => c.openTime + spec.higherMs <= candle.openTime + spec.barMs,
           );
           const signal = evaluateEntry(
             {
@@ -181,6 +190,7 @@ async function main(): Promise<void> {
             signal,
             candle,
             limitValidBars: DEFAULT_BACKTEST_PARAMS.limitValidBars,
+            barMs: execConfig.barMs,
           });
           if (order !== null && signal.direction !== null) {
             state = { ...state, pending: order, signalCount: state.signalCount + 1 };

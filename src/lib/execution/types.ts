@@ -51,6 +51,8 @@ export interface OpenPosition {
 
 export interface ExecutionConfig {
   account: AccountConfig;
+  /** 기준 봉 길이 (ms). 5분봉 300000, 15분봉 900000 */
+  barMs: number;
   ladderHigh: LadderPlanInput;
   ladderMedium: LadderPlanInput;
   /** 시장가는 다음 캔들 시가 체결, 지정가는 되돌림 대기 (ADR-015) */

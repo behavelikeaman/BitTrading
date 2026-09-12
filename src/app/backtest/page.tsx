@@ -5,11 +5,13 @@ import Link from 'next/link';
 import { BacktestReport } from '@/components/BacktestReport';
 import { useLocalStorage } from '@/lib/use-local-storage';
 import { formatPct, formatUsd } from '@/lib/format';
+import { TIMEFRAMES, timeframeSpec, type Timeframe } from '@/lib/timeframe';
 import type { BacktestResult } from '@/types';
 
 interface Params {
   from: string;
   to: string;
+  timeframe: Timeframe;
   equity: number;
   leverage: number;
   feeRatePerSide: number;
@@ -28,6 +30,7 @@ interface Params {
 const DEFAULTS: Params = {
   from: '2025-01-01',
   to: '2025-06-30',
+  timeframe: '5m',
   equity: 5000,
   leverage: 50,
   feeRatePerSide: 0.0004,
@@ -62,6 +65,7 @@ function buildBody(p: Params, entryType: 'market' | 'limit') {
     from: p.from,
     to: p.to,
     params: {
+      timeframe: p.timeframe,
       entryType,
       limitValidBars: p.limitValidBars,
       maxHoldBars: p.maxHoldBars,
@@ -190,6 +194,29 @@ export default function BacktestPage() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Field label="시작일" type="date" value={params.from} onChange={(v) => setParams({ ...params, from: v })} />
           <Field label="종료일" type="date" value={params.to} onChange={(v) => setParams({ ...params, to: v })} />
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-wide text-neutral-500">
+              기준 봉
+            </span>
+            <select
+              value={params.timeframe}
+              onChange={(e) => {
+                const t = e.target.value as Timeframe;
+                setParams({
+                  ...params,
+                  timeframe: t,
+                  maxHoldBars: timeframeSpec(t).defaultMaxHoldBars,
+                });
+              }}
+              className="w-full rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-sm text-neutral-200"
+            >
+              {TIMEFRAMES.map((t) => (
+                <option key={t} value={t}>
+                  {timeframeSpec(t).label}
+                </option>
+              ))}
+            </select>
+          </label>
           <Field label="자본금" value={params.equity} step={100} onChange={num('equity')} />
           <Field label="레버리지" value={params.leverage} step={1} onChange={num('leverage')} />
           <Field label="목표 R배수" value={params.targetRMultiple} step={0.01} onChange={num('targetRMultiple')} />
@@ -220,7 +247,8 @@ export default function BacktestPage() {
         </div>
 
         <p className="mt-3 text-xs text-neutral-500">
-          이 설정의 이론 손익분기 승률{' '}
+          기준 {timeframeSpec(params.timeframe).label} (상위{' '}
+          {timeframeSpec(params.timeframe).higher}) · 이론 손익분기 승률{' '}
           <span className="text-neutral-200">{formatPct(breakEven)}</span> · 왕복 총마찰{' '}
           {formatPct((params.feeRatePerSide + params.slippageRatePerSide) * 2, 4)} (증거금 대비{' '}
           {formatPct((params.feeRatePerSide + params.slippageRatePerSide) * 2 * params.leverage)})

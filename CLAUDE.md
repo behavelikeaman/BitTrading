@@ -34,7 +34,7 @@
 - 왕복 수수료 명목가의 0.08% (진입·청산 각 0.04%) = 50배에서 증거금 대비 4%. **추정 기본값이며 `GET /deepcoin/account/trade-fee`의 실측값으로 덮어쓴다 (ADR-012).**
 - 유지증거금률 0.5% — 추정 기본값. `GET /deepcoin/market/step-margin`의 구간표로 덮어쓴다 (ADR-012).
 - **매매는 시장가(테이커)다.** 체결 비용 = 수수료 + 슬리피지. 슬리피지 기본값 편도 0.02%는 추정치이며 `GET /deepcoin/trade/fills`의 실제 체결가로 실측해 덮어쓴다 (ADR-014).
-- 심볼 BTC-USDT 무기한, 타임프레임 5분
+- 심볼 BTC-USDT 무기한. 타임프레임은 5분·15분 선택 가능하며 상위 프레임은 한 단계 위가 자동 적용된다 (5m→15m, 15m→1h). 정의는 `src/lib/timeframe.ts` 한 곳에 있다.
 - 기본 목표: 손절폭의 1.38배(`targetRMultiple`) — 50배 기준 가격 0.58% 변동 = 증거금 대비 순수익 25% (ADR-013)
 - 손절: ATR(14) × 1.2, 청산가를 손절로 쓰지 않는다
 
@@ -44,5 +44,5 @@ npm run build          # 프로덕션 빌드
 npm run typecheck      # tsc --noEmit (build는 테스트 파일을 타입체크하지 않는다)
 npm run lint           # ESLint
 npm run test           # 테스트 (vitest)
-npm run fetch-history  # 과거 캔들 다운로드 (로컬 실행 전용)
-npm run paper          # 페이퍼 트레이딩 티커 (로컬 실행 전용)
+npm run fetch-history  # 과거 캔들 다운로드 (--timeframe 5m|15m, 로컬 실행 전용)
+npm run paper          # 페이퍼 트레이딩 티커 (--timeframe 5m|15m, 로컬 실행 전용)

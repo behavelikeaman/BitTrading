@@ -9,11 +9,14 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fetchHistoricalCandles } from '../src/services/binance';
+import { parseTimeframe, timeframeSpec } from '../src/lib/timeframe';
+import { candleFileName } from '../src/lib/data-files';
 
 interface Args {
   from: string;
   to: string;
   symbol: string;
+  timeframe: '5m' | '15m';
 }
 
 function parseArgs(argv: string[]): Args {
@@ -26,10 +29,15 @@ function parseArgs(argv: string[]): Args {
   const to = get('to');
   if (from === undefined || to === undefined) {
     throw new Error(
-      '사용법: npm run fetch-history -- --from 2025-01-01 --to 2025-06-30 [--symbol BTCUSDT]',
+      '사용법: npm run fetch-history -- --from 2025-01-01 --to 2025-06-30 [--timeframe 5m|15m] [--symbol BTCUSDT]',
     );
   }
-  return { from, to, symbol: get('symbol') ?? 'BTCUSDT' };
+  return {
+    from,
+    to,
+    symbol: get('symbol') ?? 'BTCUSDT',
+    timeframe: parseTimeframe(get('timeframe')),
+  };
 }
 
 function toMs(date: string): number {
@@ -47,8 +55,15 @@ async function main(): Promise<void> {
   const outDir = path.resolve(process.cwd(), 'data');
   await mkdir(outDir, { recursive: true });
 
-  for (const interval of ['5m', '15m'] as const) {
-    process.stderr.write(`\n${args.symbol} ${interval} ${args.from} ~ ${args.to}\n`);
+  const spec = timeframeSpec(args.timeframe);
+  // 기준봉과 상위봉 둘 다 있어야 백테스트가 돈다.
+  const intervals = [spec.binanceInterval, spec.binanceHigherInterval] as const;
+  process.stderr.write(
+    `\n${spec.label} 기준 (상위 ${spec.higher}) · ${args.from} ~ ${args.to}\n`,
+  );
+
+  for (const interval of intervals) {
+    process.stderr.write(`\n${args.symbol} ${interval}\n`);
 
     const candles = await fetchHistoricalCandles({
       symbol: args.symbol,
@@ -61,13 +76,15 @@ async function main(): Promise<void> {
       },
     });
 
-    const name = `${args.symbol.toLowerCase()}-${interval}-${args.from}-${args.to}.json`;
+    const name = candleFileName(args.symbol, interval, args.from, args.to);
     const file = path.join(outDir, name);
     await writeFile(file, JSON.stringify(candles), 'utf8');
     process.stderr.write(`\r  ${candles.length.toLocaleString()}개 -> data/${name}\n`);
   }
 
-  process.stderr.write('\n완료. 백테스트 화면에서 이 기간을 선택하면 된다.\n');
+  process.stderr.write(
+    `\n완료. 백테스트 화면에서 이 기간과 ${spec.label}을 선택하면 된다.\n`,
+  );
 }
 
 main().catch((error: unknown) => {

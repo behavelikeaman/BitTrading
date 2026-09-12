@@ -7,6 +7,7 @@ import { compareTrades, type DivergenceReport } from '@/lib/paper/divergence';
 import { DEFAULT_BACKTEST_PARAMS, runBacktest } from '@/lib/backtest/engine';
 import { DEFAULT_ACCOUNT } from '@/lib/risk/sizing';
 import { DEFAULT_ENTRY_CONFIG } from '@/lib/signal/entry';
+import { candleFileNames } from '@/lib/data-files';
 import type { Candle } from '@/types';
 
 export const runtime = 'nodejs';
@@ -46,16 +47,17 @@ export async function POST(): Promise<
   const from = dayString(paperTrades[0].entryTime);
   const to = dayString(paperTrades[paperTrades.length - 1].exitTime + 86_400_000);
   const dir = path.resolve(process.cwd(), 'data');
+  const names = candleFileNames('BTCUSDT', DEFAULT_BACKTEST_PARAMS.timeframe, from, to);
   const [candles5m, candles15m] = await Promise.all([
-    loadCandles(path.join(dir, `btcusdt-5m-${from}-${to}.json`)),
-    loadCandles(path.join(dir, `btcusdt-15m-${from}-${to}.json`)),
+    loadCandles(path.join(dir, names.primary)),
+    loadCandles(path.join(dir, names.higher)),
   ]);
 
   if (candles5m === null || candles15m === null) {
     return NextResponse.json(
       {
         error: `페이퍼가 커버한 구간(${from} ~ ${to})의 과거 캔들이 없다`,
-        hint: `npm run fetch-history -- --from ${from} --to ${to}`,
+        hint: `npm run fetch-history -- --from ${from} --to ${to} --timeframe ${DEFAULT_BACKTEST_PARAMS.timeframe}`,
       },
       { status: 404 },
     );

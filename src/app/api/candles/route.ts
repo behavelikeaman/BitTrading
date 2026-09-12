@@ -9,7 +9,8 @@ export async function GET(
   request: Request,
 ): Promise<NextResponse<{ candles: Candle[] } | { error: string }>> {
   const params = new URL(request.url).searchParams;
-  const bar = params.get('bar') === '15m' ? '15m' : '5m';
+  const raw = params.get('bar');
+  const bar = raw === '15m' ? '15m' : raw === '1h' ? '1h' : '5m';
   const limit = Number(params.get('limit') ?? 200);
 
   if (!Number.isFinite(limit) || limit <= 0) {

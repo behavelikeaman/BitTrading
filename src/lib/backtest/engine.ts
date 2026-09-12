@@ -17,20 +17,21 @@ import {
   createPendingOrder,
   forceClose,
   stepExecution,
-  MS_5M,
 } from '@/lib/execution/machine';
+import { timeframeSpec, type Timeframe } from '@/lib/timeframe';
 import type {
   ExecutionConfig,
   OpenPosition,
   PendingOrder,
 } from '@/lib/execution/types';
 
-const MS_15M = 900_000;
 const MS_DAY = 24 * 60 * 60 * 1000;
 
 export interface BacktestParams {
   account: AccountConfig;
   entry: EntryConfig;
+  /** 기준 타임프레임. 상위 프레임은 자동으로 한 단계 위가 된다. */
+  timeframe: Timeframe;
   ladderHigh: LadderPlanInput;
   ladderMedium: LadderPlanInput;
   /** 시장가는 다음 캔들 시가 체결, 지정가는 되돌림 대기 (ADR-015) */
@@ -49,6 +50,7 @@ export interface BacktestParams {
 }
 
 export const DEFAULT_BACKTEST_PARAMS: Omit<BacktestParams, 'account' | 'entry'> = {
+  timeframe: '5m',
   ladderHigh: DEFAULT_LADDER_HIGH,
   ladderMedium: DEFAULT_LADDER_MEDIUM,
   entryType: 'market',
@@ -64,6 +66,7 @@ export const DEFAULT_BACKTEST_PARAMS: Omit<BacktestParams, 'account' | 'entry'> 
 export function toExecutionConfig(params: BacktestParams): ExecutionConfig {
   return {
     account: params.account,
+    barMs: timeframeSpec(params.timeframe).barMs,
     ladderHigh: params.ladderHigh,
     ladderMedium: params.ladderMedium,
     entryType: params.entryType,
@@ -96,6 +99,7 @@ export function runBacktest(input: {
   const candles = input.candles5m.filter((c) => c.closed);
   const htf = input.candles15m.filter((c) => c.closed);
   const execConfig = toExecutionConfig(params);
+  const { barMs, higherMs } = timeframeSpec(params.timeframe);
 
   const trades: Trade[] = [];
   let equity = account.equity;
@@ -141,11 +145,11 @@ export function runBacktest(input: {
       const windowStart = Math.max(0, i + 1 - params.signalWindowBars);
       const window5m = candles.slice(windowStart, i + 1);
 
-      // 캔들 i가 끝난 시각까지 이미 종료된 15분봉만 넘긴다.
-      const htfDeadline = candle.openTime + MS_5M;
+      // 캔들 i가 끝난 시각까지 이미 종료된 상위 프레임 봉만 넘긴다.
+      const htfDeadline = candle.openTime + barMs;
       while (
         htfCursor < htf.length &&
-        htf[htfCursor].openTime + MS_15M <= htfDeadline
+        htf[htfCursor].openTime + higherMs <= htfDeadline
       ) {
         htfCursor += 1;
       }
@@ -169,6 +173,7 @@ export function runBacktest(input: {
         signal,
         candle,
         limitValidBars: params.limitValidBars,
+        barMs,
       });
       if (order !== null) {
         signalCount += 1;

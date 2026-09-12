@@ -3,8 +3,9 @@ import {
   createPendingOrder,
   forceClose,
   stepExecution,
-  MS_5M,
 } from '@/lib/execution/machine';
+
+const MS_5M = 300_000;
 import { toExecutionConfig } from '@/lib/backtest/engine';
 import { testParams, TEST_ACCOUNT } from '@/lib/backtest/fixtures';
 import type { ExecutionConfig, OpenPosition } from '@/lib/execution/types';
@@ -239,6 +240,7 @@ describe('createPendingOrder', () => {
       signal: signal(),
       candle: candle(T0, 99, 101, 98, 100),
       limitValidBars: 3,
+      barMs: MS_5M,
     })!;
     expect(order.fromTime).toBe(T0 + MS_5M);
     expect(order.expiresAtTime).toBe(T0 + 3 * MS_5M);
@@ -248,9 +250,10 @@ describe('createPendingOrder', () => {
 
   it('진입 불가 신호면 null이다', () => {
     const c = candle(T0, 99, 101, 98, 100);
-    expect(createPendingOrder({ signal: signal({ conviction: 'none' }), candle: c, limitValidBars: 3 })).toBeNull();
-    expect(createPendingOrder({ signal: signal({ direction: null }), candle: c, limitValidBars: 3 })).toBeNull();
-    expect(createPendingOrder({ signal: signal({ indicators: null }), candle: c, limitValidBars: 3 })).toBeNull();
+    const base = { candle: c, limitValidBars: 3, barMs: MS_5M };
+    expect(createPendingOrder({ ...base, signal: signal({ conviction: 'none' }) })).toBeNull();
+    expect(createPendingOrder({ ...base, signal: signal({ direction: null }) })).toBeNull();
+    expect(createPendingOrder({ ...base, signal: signal({ indicators: null }) })).toBeNull();
   });
 });
 

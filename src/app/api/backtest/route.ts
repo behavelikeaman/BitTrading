@@ -8,6 +8,8 @@ import {
 } from '@/lib/backtest/engine';
 import { DEFAULT_ENTRY_CONFIG } from '@/lib/signal/entry';
 import { DEFAULT_ACCOUNT } from '@/lib/risk/sizing';
+import { candleFileNames } from '@/lib/data-files';
+import { parseTimeframe } from '@/lib/timeframe';
 import type { BacktestResult, Candle } from '@/types';
 
 export const runtime = 'nodejs';
@@ -19,14 +21,6 @@ interface BacktestRequestBody {
   to?: string;
   symbol?: string;
   params?: Partial<BacktestParams>;
-}
-
-function dataFile(symbol: string, interval: '5m' | '15m', from: string, to: string) {
-  return path.resolve(
-    process.cwd(),
-    'data',
-    `${symbol.toLowerCase()}-${interval}-${from}-${to}.json`,
-  );
 }
 
 async function loadCandles(file: string): Promise<Candle[] | null> {
@@ -60,18 +54,20 @@ export async function POST(
     return NextResponse.json({ error: 'from·to가 필요하다' }, { status: 400 });
   }
 
-  const file5m = dataFile(symbol, '5m', from, to);
-  const file15m = dataFile(symbol, '15m', from, to);
+  const timeframe = parseTimeframe(body.params?.timeframe);
+  const names = candleFileNames(symbol, timeframe, from, to);
+  const dir = path.resolve(process.cwd(), 'data');
   const [candles5m, candles15m] = await Promise.all([
-    loadCandles(file5m),
-    loadCandles(file15m),
+    loadCandles(path.join(dir, names.primary)),
+    loadCandles(path.join(dir, names.higher)),
   ]);
 
   if (candles5m === null || candles15m === null) {
+    const missing = candles5m === null ? names.primary : names.higher;
     return NextResponse.json(
       {
-        error: `과거 데이터가 없다: ${path.basename(candles5m === null ? file5m : file15m)}`,
-        hint: `npm run fetch-history -- --from ${from} --to ${to}${symbol === 'BTCUSDT' ? '' : ` --symbol ${symbol}`}`,
+        error: `과거 데이터가 없다: ${missing}`,
+        hint: `npm run fetch-history -- --from ${from} --to ${to} --timeframe ${timeframe}${symbol === 'BTCUSDT' ? '' : ` --symbol ${symbol}`}`,
       },
       { status: 404 },
     );

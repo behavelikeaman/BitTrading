@@ -8,15 +8,20 @@ const DEFAULT_INST_ID = 'BTC-USDT-SWAP';
 /** 1회 최대 개수 (docs/DEEPCOIN-API.md) */
 const MAX_LIMIT = 300;
 
-const BAR_PARAM: Record<'5m' | '15m', string> = {
+/** Deepcoin은 1시간 이상을 대문자로 쓴다 (docs/DEEPCOIN-API.md) */
+const BAR_PARAM: Record<DeepcoinBar, string> = {
   '5m': '5m',
   '15m': '15m',
+  '1h': '1H',
 };
 
-const INTERVAL_MS: Record<'5m' | '15m', number> = {
+const INTERVAL_MS: Record<DeepcoinBar, number> = {
   '5m': 300_000,
   '15m': 900_000,
+  '1h': 3_600_000,
 };
+
+export type DeepcoinBar = '5m' | '15m' | '1h';
 
 interface DeepcoinEnvelope<T> {
   code: string;
@@ -113,7 +118,7 @@ async function getPrivate<T>(
  */
 export async function fetchRecentCandles(input: {
   instId?: string;
-  bar: '5m' | '15m';
+  bar: DeepcoinBar;
   limit?: number;
   /** 이 시각(ms) 이전 구간. Deepcoin에는 since가 없어 역방향으로 페이지한다. */
   after?: number;

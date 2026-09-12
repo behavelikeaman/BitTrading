@@ -14,7 +14,6 @@ import type {
   PendingOrder,
 } from '@/lib/execution/types';
 
-export const MS_5M = 300_000;
 const MS_8H = 8 * 60 * 60 * 1000;
 
 export interface StepInput {
@@ -126,7 +125,7 @@ export function forceClose(
   config: ExecutionConfig,
   reason: ExitReason,
 ): Trade {
-  return buildTrade(position, candle.close, candle.openTime + MS_5M, reason, config);
+  return buildTrade(position, candle.close, candle.openTime + config.barMs, reason, config);
 }
 
 /** 신호에서 대기 주문을 만든다. 진입 불가 신호면 null. */
@@ -134,8 +133,10 @@ export function createPendingOrder(input: {
   signal: Signal;
   candle: Candle;
   limitValidBars: number;
+  /** 기준 봉 길이 (ms) */
+  barMs: number;
 }): PendingOrder | null {
-  const { signal, candle, limitValidBars } = input;
+  const { signal, candle, limitValidBars, barMs } = input;
   if (
     signal.conviction === 'none' ||
     signal.direction === null ||
@@ -147,9 +148,9 @@ export function createPendingOrder(input: {
     direction: signal.direction,
     conviction: signal.conviction,
     score: signal.score,
-    fromTime: candle.openTime + MS_5M,
+    fromTime: candle.openTime + barMs,
     limitPrice: candle.close,
-    expiresAtTime: candle.openTime + limitValidBars * MS_5M,
+    expiresAtTime: candle.openTime + limitValidBars * barMs,
     atrAtSignal: signal.indicators.atr14,
   };
 }
@@ -285,12 +286,12 @@ export function stepExecution(input: StepInput): StepOutput {
           pos.direction === 'long'
             ? next.price * (1 - account.slippageRatePerSide)
             : next.price * (1 + account.slippageRatePerSide);
-        closedTrade = buildTrade(pos, exit, candle.openTime + MS_5M, 'stop-loss', config);
+        closedTrade = buildTrade(pos, exit, candle.openTime + config.barMs, 'stop-loss', config);
       } else {
         closedTrade = buildTrade(
           pos,
           next.price,
-          candle.openTime + MS_5M,
+          candle.openTime + config.barMs,
           'liquidation',
           config,
         );
@@ -309,18 +310,18 @@ export function stepExecution(input: StepInput): StepOutput {
       return {
         pending,
         position: null,
-        trade: buildTrade(pos, tpNow, candle.openTime + MS_5M, 'take-profit', config),
+        trade: buildTrade(pos, tpNow, candle.openTime + config.barMs, 'take-profit', config),
       };
     }
 
     // 보유 기간은 인덱스가 아니라 시각으로 잰다. 캔들이 빠져도 올바른
     // 시점에 타임아웃되어야 한다.
-    const heldBars = (candle.openTime - pos.entryTime) / MS_5M;
+    const heldBars = (candle.openTime - pos.entryTime) / config.barMs;
     if (heldBars >= config.maxHoldBars) {
       return {
         pending,
         position: null,
-        trade: buildTrade(pos, candle.close, candle.openTime + MS_5M, 'timeout', config),
+        trade: buildTrade(pos, candle.close, candle.openTime + config.barMs, 'timeout', config),
       };
     }
 

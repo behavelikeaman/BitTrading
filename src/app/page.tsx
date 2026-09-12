@@ -11,6 +11,7 @@ import { SettingsPanel, type GuardInput, type Settings } from '@/components/Sett
 import { SignalPanel } from '@/components/SignalPanel';
 import { computeIndicators } from '@/lib/indicators';
 import { useLocalStorage } from '@/lib/use-local-storage';
+import { TIMEFRAMES, timeframeSpec, type Timeframe } from '@/lib/timeframe';
 import { formatTime } from '@/lib/format';
 import type { AccountParamsResponse } from '@/app/api/account-params/route';
 import type { SignalResponse } from '@/app/api/signal/route';
@@ -30,10 +31,12 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 const DEFAULT_GUARD: GuardInput = { consecutiveLosses: 0, dailyPnlPct: 0 };
+const DEFAULT_TF: { timeframe: Timeframe } = { timeframe: '5m' };
 
 export default function Home() {
   const [settings, setSettings] = useLocalStorage('bt.settings', DEFAULT_SETTINGS);
   const [guard, setGuard] = useLocalStorage('bt.guard', DEFAULT_GUARD);
+  const [tf, setTf] = useLocalStorage('bt.timeframe', DEFAULT_TF);
 
   const [data, setData] = useState<SignalResponse | null>(null);
   const [candles, setCandles] = useState<Candle[]>([]);
@@ -48,6 +51,7 @@ export default function Home() {
 
   const poll = useCallback(async () => {
     const query = new URLSearchParams({
+      timeframe: tf.timeframe,
       consecutiveLosses: String(guard.consecutiveLosses),
       dailyPnlPct: String(guard.dailyPnlPct),
       equity: String(settings.equity),
@@ -68,7 +72,7 @@ export default function Home() {
     try {
       const [signalRes, candleRes] = await Promise.all([
         fetch(`/api/signal?${query}`, { cache: 'no-store' }),
-        fetch('/api/candles?bar=5m&limit=200', { cache: 'no-store' }),
+        fetch(`/api/candles?bar=${tf.timeframe}&limit=200`, { cache: 'no-store' }),
       ]);
 
       if (!signalRes.ok) {
@@ -100,7 +104,7 @@ export default function Home() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '알 수 없는 오류');
     }
-  }, [guard, settings, accountParams, notifyEnabled]);
+  }, [guard, settings, accountParams, notifyEnabled, tf]);
 
   // 체결 비용은 자주 바뀌지 않으므로 진입 시 1회만 읽는다.
   useEffect(() => {
@@ -161,10 +165,26 @@ export default function Home() {
         <div>
           <h1 className="text-lg font-bold">BitTrading</h1>
           <p className="text-xs text-neutral-500">
-            BTC-USDT 무기한 · 5분봉 · 알림 전용 (주문은 직접 넣는다)
+            BTC-USDT 무기한 · {timeframeSpec(tf.timeframe).label} · 알림 전용 (주문은 직접 넣는다)
           </p>
         </div>
         <div className="flex items-center gap-3 text-xs text-neutral-500">
+          <div className="flex rounded border border-neutral-800">
+            {TIMEFRAMES.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTf({ timeframe: t })}
+                className={`px-2 py-1 ${
+                  tf.timeframe === t
+                    ? 'bg-neutral-200 font-semibold text-neutral-900'
+                    : 'text-neutral-400 hover:bg-neutral-900'
+                }`}
+              >
+                {timeframeSpec(t).label}
+              </button>
+            ))}
+          </div>
           <Link href="/backtest" className="hover:text-neutral-300">백테스트</Link>
           <Link href="/paper" className="hover:text-neutral-300">페이퍼</Link>
           {data && <span>갱신 {formatTime(data.updatedAt)}</span>}

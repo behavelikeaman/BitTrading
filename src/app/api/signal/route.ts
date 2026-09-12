@@ -3,11 +3,13 @@ import { fetchFundingRate, fetchRecentCandles } from '@/services/deepcoin';
 import { DEFAULT_ENTRY_CONFIG, evaluateEntry } from '@/lib/signal/entry';
 import { DEFAULT_ACCOUNT, planPosition } from '@/lib/risk/sizing';
 import { DEFAULT_LADDER_HIGH, DEFAULT_LADDER_MEDIUM } from '@/lib/risk/ladder';
+import { parseTimeframe, timeframeSpec } from '@/lib/timeframe';
 import type { AccountConfig, PositionPlan, Signal } from '@/types';
 
 export const runtime = 'nodejs';
 
 export interface SignalResponse {
+  timeframe: '5m' | '15m';
   signal: Signal;
   plan: PositionPlan | null;
   lastPrice: number;
@@ -70,15 +72,21 @@ export async function GET(
     costSource: params.get('costSource') === 'measured' ? 'measured' : 'default',
   };
 
+  const timeframe = parseTimeframe(params.get('timeframe'));
+  const spec = timeframeSpec(timeframe);
+
   try {
     const [candles5m, candles15m, fundingRate] = await Promise.all([
-      fetchRecentCandles({ bar: '5m', limit: 300 }),
-      fetchRecentCandles({ bar: '15m', limit: 200 }),
+      fetchRecentCandles({ bar: spec.primary, limit: 300 }),
+      fetchRecentCandles({ bar: spec.higher, limit: 200 }),
       fetchFundingRate().catch(() => 0),
     ]);
 
     if (candles5m.length === 0) {
-      return NextResponse.json({ error: '확정된 5분봉이 없다' }, { status: 502 });
+      return NextResponse.json(
+        { error: `확정된 ${spec.label}이 없다` },
+        { status: 502 },
+      );
     }
 
     // 시각은 서버가 주입한다. src/lib/은 Date.now()를 읽지 않는다.
@@ -106,6 +114,7 @@ export async function GET(
         : null;
 
     return NextResponse.json({
+      timeframe,
       signal,
       plan,
       lastPrice: last.close,

@@ -63,10 +63,16 @@
 
 ### CLI
 ```
-npm run fetch-history -- --from YYYY-MM-DD --to YYYY-MM-DD
-npm run paper        # 티커 (장기 실행)
+npm run fetch-history -- --from YYYY-MM-DD --to YYYY-MM-DD [--timeframe 5m|15m]
+npm run paper        # 티커 (장기 실행). --timeframe 5m|15m
 npm run divergence   # 괴리 검사 (불일치 시 종료 코드 1)
 ```
+
+### 타임프레임
+5분봉·15분봉을 고를 수 있고 상위 프레임은 한 단계 위가 자동이다 (5m→15m, 15m→1h).
+정의는 `src/lib/timeframe.ts` 한 곳에 모여 있고, 거래소별 표기 차이(Deepcoin `1H`,
+Binance `1h`)와 과거 데이터 파일명(`src/lib/data-files.ts`)도 여기서 파생된다.
+체결 엔진은 `ExecutionConfig.barMs`로 봉 길이를 받으므로 5분 하드코딩이 없다.
 
 ---
 
