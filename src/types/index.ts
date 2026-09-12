@@ -149,3 +149,51 @@ export interface PositionPlan {
   targetNetReturnOnMargin: number;
   warnings: string[];
 }
+
+export type ExitReason =
+  | 'take-profit'
+  | 'stop-loss'
+  | 'liquidation'
+  | 'timeout'
+  | 'end-of-data';
+
+export interface Trade {
+  entryTime: number;
+  exitTime: number;
+  direction: Direction;
+  conviction: Conviction;
+  score: number;
+  /** 실제 체결된 레그만. 닿지 않은 물타기 레그는 들어가지 않는다. */
+  legs: LadderLeg[];
+  averageEntryPrice: number;
+  exitPrice: number;
+  exitReason: ExitReason;
+  /** 수수료·슬리피지·펀딩 차감 전 가격 손익 */
+  grossPnl: number;
+  fees: number;
+  funding: number;
+  netPnl: number;
+  /** 진입 시점 자본 대비 */
+  netPnlPct: number;
+}
+
+export interface BacktestResult {
+  trades: Trade[];
+  totalTrades: number;
+  winRate: number;
+  profitFactor: number;
+  /** 트레이드당 평균 순손익 (USDT) */
+  expectancy: number;
+  /** 자본 대비 최대 낙폭 비율 */
+  maxDrawdown: number;
+  maxConsecutiveLosses: number;
+  totalFees: number;
+  totalFunding: number;
+  finalEquity: number;
+  liquidationCount: number;
+  /** 진입 신호가 난 횟수 */
+  signalCount: number;
+  /** signalCount 대비 실제 체결 비율. 지정가 진입의 역선택 크기 (ADR-015) */
+  fillRate: number;
+  equityCurve: { time: number; equity: number }[];
+}
