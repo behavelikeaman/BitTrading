@@ -81,3 +81,71 @@ export interface GuardState {
   /** 당일 누적 손익률 (-0.03 = -3%) */
   dailyPnlPct: number;
 }
+
+/**
+ * 계좌·전략 설정.
+ *
+ * 목표는 증거금 대비 %가 아니라 손절폭의 배수(targetRMultiple)로 정의한다.
+ * 증거금 대비 %는 레버리지 종속값이라, 레버리지를 바꾸는 순간 같은 이름의
+ * 목표가 완전히 다른 전략이 된다 (ADR-013).
+ */
+export interface AccountConfig {
+  /** 총자본 (USDT) */
+  equity: number;
+  /** 기본 50 */
+  leverage: number;
+  /** 명목가 대비 편도 수수료. 기본 0.0004 (0.04%) */
+  feeRatePerSide: number;
+  /** 명목가 대비 편도 슬리피지. 시장가 매매 전제 (ADR-014). 기본 0.0002 */
+  slippageRatePerSide: number;
+  /** 유지증거금률. 기본 0.005 */
+  maintenanceMarginRate: number;
+  /** 확신 시 리스크 예산 비율. 기본 0.02 */
+  riskPctHigh: number;
+  /** 약간의 확신. 기본 0.01 */
+  riskPctMedium: number;
+  /** 손절폭 = ATR × 이 배수. 기본 1.2 */
+  atrStopMultiple: number;
+  /** 목표 = 손절폭 × 이 배수. 기본 1.38 (ADR-013) */
+  targetRMultiple: number;
+  /** 수수료·슬리피지가 실측인지 추정인지 (ADR-012, ADR-014) */
+  costSource: 'measured' | 'default';
+}
+
+export interface LadderLeg {
+  /** 0 = 1차 진입 */
+  index: number;
+  price: number;
+  /** BTC 수량 */
+  qty: number;
+  notional: number;
+  margin: number;
+}
+
+export interface PositionPlan {
+  direction: Direction;
+  conviction: Conviction;
+  /** 물타기 포함 전량. 진입 전에 확정된다. */
+  legs: LadderLeg[];
+  /** 래더 전체 공통 손절가 */
+  stopPrice: number;
+  /** 평단 기준 목표가 */
+  takeProfitPrice: number;
+  /** 평단 + 체결비용 회수 가격 (물타기 탈출 목표) */
+  breakEvenPrice: number;
+  /** 전량 체결 가정 평단 */
+  averageEntryPrice: number;
+  totalNotional: number;
+  totalMargin: number;
+  /** 전량 체결 가정 청산가 */
+  liquidationPrice: number;
+  /** 손절 도달 시 예상 손실 (USDT, 체결비용 포함) */
+  riskBudget: number;
+  /** 목표 도달 시 예상 순이익 (USDT) */
+  rewardAtTarget: number;
+  /** 이 손익비의 손익분기 승률 */
+  breakEvenWinRate: number;
+  /** 현재 레버리지 기준 증거금 대비 순수익 환산값 (표시용, ADR-013) */
+  targetNetReturnOnMargin: number;
+  warnings: string[];
+}

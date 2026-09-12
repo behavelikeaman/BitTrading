@@ -29,7 +29,10 @@
     {
       "step": 3,
       "name": "risk-engine",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-12T16:58:05+0900",
+      "completed_at": "2026-09-12T16:58:05+0900",
+      "summary": "리스크 엔진을 TDD로 작성. 타입: AccountConfig{equity,leverage,feeRatePerSide,slippageRatePerSide,maintenanceMarginRate,riskPctHigh 0.02,riskPctMedium 0.01,atrStopMultiple 1.2,targetRMultiple 1.38,costSource}, LadderLeg, PositionPlan. src/lib/risk/liquidation.ts: averagePrice(legs), liquidationPrice({direction,averageEntryPrice,leverage,mmr}) (50배 MMR 0.5% -> 1.5% 거리), resolveMmr(notional,tiers,fallback)(ADR-012 구간표), breakEvenPrice({direction,avg,costRatePerSide}). src/lib/risk/ladder.ts: LadderPlanInput{addCount,addSpacingAtr,weights}, DEFAULT_LADDER_HIGH(1회 50/50), DEFAULT_LADDER_MEDIUM(2회 25/25/50), ladderPrices, ladderStopPrice(마지막 레그 기준 ATR×배수 바깥), buildLadder(qtyStep 내림 지원), ladderLossAtStop(레그별 손절거리 개별 합산). 비중 합≠1이면 throw. src/lib/risk/sizing.ts: DEFAULT_ACCOUNT, costRatePerSide=수수료+슬리피지(ADR-014), planPosition(). 계산 순서는 리스크예산 -> 명목가(가중 손절거리로 역산) -> 수량(반올림) -> 증거금(결과값). 반올림 후 값으로 riskBudget 재계산. 경고 5종: 청산가가 손절보다 가까움/증거금 초과/BE승률>60%/손익비<1/비용 추정치. src/lib/risk/guard.ts: INITIAL_GUARD, updateGuard(이익 1회로 연속손실 초기화), isHalted, resetDaily. 검증된 기준 수치(equity 5000, ATR 350, 50배, 수수료 0.04%/side, 슬리피지 0): 손절 0.42%, 목표 1.38R=0.5796%, targetNetReturnOnMargin 0.2498, BE승률 0.5002, riskBudget 100 USDT, 명목가 20,000, 증거금 400(자본의 8%). 레버리지 독립성 테스트: 50->25로 바꿔도 목표가/손절가/명목가/riskBudget 불변, 증거금·청산가만 변함. 래더 총손실을 테스트에서 레그별로 직접 합산해 예산과 1 USDT 이내 일치 확인(확신 100, 약간의확신 50). 단일 진입 공식을 래더에 적용하면 예산을 10% 이상 초과함을 회귀 테스트로 고정. 문서 교정: PRD 수수료/슬리피지 민감도 표가 ADR-013 이전 정책(목표=증거금 대비 %)으로 계산돼 있어 수수료 0.06% -> 51.9%로 잘못 적혀 있었다. 목표가 1.38R로 고정된 현 정책에서는 54.0%가 맞다. 수수료와 슬리피지가 왕복 총마찰로 동일하게 들어가므로 두 표를 하나로 통합했다. ADR-012 수치도 교정. 리스크 테스트 50개, 전체 117개 통과. build/lint 통과."
     },
     {
       "step": 4,
