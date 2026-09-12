@@ -222,6 +222,20 @@ describe('planPosition — 경고', () => {
     const p = plan({ leverage: 1, riskPctHigh: 0.5 });
     expect(p.warnings.some((w) => w.includes('자본금'))).toBe(true);
   });
+
+  it('목표가 왕복 마찰보다 작으면 "도달해도 손해"라고 경고한다', () => {
+    // R배수가 너무 낮으면 목표폭이 체결비용조차 못 넘는다. 화면에는
+    // 증거금 대비 목표가 음수로 조용히 떠 있을 뿐이라 놓치기 쉽다.
+    const p = plan({ targetRMultiple: 0.15 });
+    expect(p.targetNetReturnOnMargin).toBeLessThan(0);
+    expect(p.warnings.some((w) => w.includes('도달해도 손해'))).toBe(true);
+  });
+
+  it('목표가 마찰을 넘으면 그 경고가 없다', () => {
+    const p = plan({ targetRMultiple: 3 });
+    expect(p.targetNetReturnOnMargin).toBeGreaterThan(0);
+    expect(p.warnings.some((w) => w.includes('도달해도 손해'))).toBe(false);
+  });
 });
 
 describe('planPosition — 수량 반올림 (ADR-009)', () => {

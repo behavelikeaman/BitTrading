@@ -1,6 +1,11 @@
 'use client';
 
 import { formatPct } from '@/lib/format';
+import {
+  breakEvenRMultiple,
+  rMultipleForReturnOnMargin,
+  returnOnMarginForR,
+} from '@/lib/risk/target';
 
 export interface Settings {
   equity: number;
@@ -28,34 +33,22 @@ interface Props {
   price?: number | null;
 }
 
-/**
- * 목표 R배수를 현재 레버리지 기준 증거금 대비 순수익으로 환산한다 (ADR-013).
- *
- * 손절폭 = ATR × atrStopMultiple, 목표폭 = 손절폭 × targetRMultiple 이므로
- * ATR과 현재가가 있어야 계산할 수 있다.
- */
-function targetReturnOnMargin(
-  settings: Settings,
-  atr: number,
-  price: number,
-): number {
-  const targetWidth = atr * settings.atrStopMultiple * settings.targetRMultiple;
-  const roundTrip = (settings.feeRatePerSide + settings.slippageRatePerSide) * 2;
-  return (targetWidth / price) * settings.leverage - roundTrip * settings.leverage;
-}
-
 function Field({
   label,
   value,
   step,
   onChange,
   suffix,
+  disabled,
+  hint,
 }: {
   label: string;
   value: number;
   step: number;
   onChange: (n: number) => void;
   suffix?: string;
+  disabled?: boolean;
+  hint?: string;
 }) {
   return (
     <label className="block">
@@ -67,16 +60,20 @@ function Field({
           type="number"
           step={step}
           value={value}
+          disabled={disabled === true}
           onChange={(e) => {
             const n = Number(e.target.value);
             if (Number.isFinite(n)) onChange(n);
           }}
-          className="w-full rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-sm text-neutral-200"
+          className="w-full rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-sm text-neutral-200 disabled:opacity-40"
         />
         {suffix !== undefined && (
           <span className="shrink-0 text-xs text-neutral-400">{suffix}</span>
         )}
       </div>
+      {hint !== undefined && (
+        <span className="text-[11px] text-neutral-500">{hint}</span>
+      )}
     </label>
   );
 }
@@ -99,10 +96,38 @@ export function SettingsPanel({
   const set = <K extends keyof Settings>(key: K) => (value: Settings[K]) =>
     onSettings({ ...settings, [key]: value });
 
-  const roundTripCost = (settings.feeRatePerSide + settings.slippageRatePerSide) * 2;
+  const costRatePerSide = settings.feeRatePerSide + settings.slippageRatePerSide;
+  const roundTripCost = costRatePerSide * 2;
   const canConvert =
     typeof atr === 'number' && atr > 0 && typeof price === 'number' && price > 0;
-  const onMargin = canConvert ? targetReturnOnMargin(settings, atr, price) : null;
+
+  // 환산은 전부 lib이 한다. 화면에서 다시 계산하면 정의가 두 곳이 된다.
+  const conversion = canConvert
+    ? {
+        atr,
+        price,
+        atrStopMultiple: settings.atrStopMultiple,
+        leverage: settings.leverage,
+        costRatePerSide,
+      }
+    : null;
+  const onMargin =
+    conversion === null
+      ? null
+      : returnOnMarginForR({ ...conversion, targetRMultiple: settings.targetRMultiple });
+  const minR = conversion === null ? null : breakEvenRMultiple(conversion);
+
+  /** 증거금 대비 목표 %를 입력하면 R배수로 되돌려 저장한다 (ADR-013) */
+  const setTargetByMargin = (pct: number) => {
+    if (conversion === null) return;
+    const r = rMultipleForReturnOnMargin({
+      ...conversion,
+      netReturnOnMargin: pct / 100,
+    });
+    if (r === null || !Number.isFinite(r)) return;
+    // 소수점 둘째 자리까지만 — 그 아래는 ATR이 조금만 변해도 의미가 없다.
+    onSettings({ ...settings, targetRMultiple: Math.round(r * 100) / 100 });
+  };
 
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
@@ -116,6 +141,16 @@ export function SettingsPanel({
         <Field label="리스크 (약간)" value={settings.riskPctMedium} step={0.005} onChange={set('riskPctMedium')} />
         <Field label="ATR 손절 배수" value={settings.atrStopMultiple} step={0.1} onChange={set('atrStopMultiple')} />
         <Field label="목표 R배수" value={settings.targetRMultiple} step={0.01} onChange={set('targetRMultiple')} />
+        {/* 형님은 "증거금 대비 몇 %"로 생각한다. 둘 중 아무거나 고치면 나머지가 따라온다. */}
+        <Field
+          label="목표 (증거금 대비)"
+          value={onMargin === null ? 0 : Math.round(onMargin * 10000) / 100}
+          step={1}
+          onChange={setTargetByMargin}
+          suffix="%"
+          disabled={conversion === null}
+          hint={conversion === null ? 'ATR 대기' : undefined}
+        />
       </div>
 
       <p className="mt-2 text-xs text-neutral-400">
@@ -125,12 +160,29 @@ export function SettingsPanel({
         ) : (
           <>
             증거금 대비 순수익{' '}
-            <span className="text-neutral-300">{formatPct(onMargin)}</span>
+            <span
+              className={
+                onMargin <= 0
+                  ? 'font-semibold text-[var(--color-short)]'
+                  : 'text-neutral-200'
+              }
+            >
+              {formatPct(onMargin)}
+            </span>
           </>
         )}
         {' · '}왕복 총마찰 {formatPct(roundTripCost, 4)} (증거금 대비{' '}
         {formatPct(roundTripCost * settings.leverage)})
       </p>
+
+      {onMargin !== null && onMargin <= 0 && minR !== null && (
+        // 목표가 마찰보다 작으면 익절해도 손해다. ATR이 줄어든 구간에서
+        // 고정 R배수를 쓰면 실제로 이 상태가 된다.
+        <p className="mt-1 rounded border border-[var(--color-short)]/50 bg-[var(--color-short)]/10 px-2 py-1.5 text-xs text-[var(--color-short)]">
+          이 목표는 도달해도 손해다. 현재 ATR에서 마찰을 넘으려면 최소{' '}
+          <span className="font-semibold">{minR.toFixed(2)}R</span> 이상이어야 한다.
+        </p>
+      )}
 
       <div className="mt-3 grid grid-cols-2 gap-3 border-t border-neutral-800 pt-3 md:grid-cols-4">
         <Field

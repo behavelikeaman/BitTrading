@@ -183,6 +183,14 @@ export function planPosition(input: PlanPositionInput): PositionPlan {
   if (rewardAtTarget < riskBudget) {
     warnings.push('손익비가 1 미만이다.');
   }
+  // 목표폭이 왕복 체결비용보다 작으면 익절해도 손해다. 증거금 대비 목표가
+  // 음수로 조용히 표시될 뿐이라 놓치기 쉬워 경고로 올린다. ATR이 작아진
+  // 구간에서 고정 R배수를 쓰면 실제로 벌어진다.
+  if (targetNetReturnOnMargin <= 0) {
+    warnings.push(
+      `목표가 왕복 마찰보다 작다 — 도달해도 손해다 (증거금 대비 ${(targetNetReturnOnMargin * 100).toFixed(2)}%). 목표 R배수를 올려라.`,
+    );
+  }
   if (account.costSource === 'default') {
     warnings.push(
       '수수료·슬리피지가 추정치다. 실측값을 불러오면 계산이 정확해진다.',
