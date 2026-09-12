@@ -237,6 +237,25 @@ export interface BacktestResult {
    * null을 쓰고 화면에서 ∞로 그린다.
    */
   profitFactor: number | null;
+  /** 이긴 트레이드의 평균 순이익 (USDT). 승이 없으면 0 */
+  averageWin: number;
+  /** 진 트레이드의 평균 순손실 (USDT, 양수). 패가 없으면 0 */
+  averageLoss: number;
+  /**
+   * 실측 손익비 = 평균 승 / 평균 패.
+   *
+   * 목표 R배수(이론 손익비)와 다른 숫자다. 이론값은 전량 체결 뒤 목표에
+   * 닿는 경우만 세지만, 실제로는 이기는 거래가 1차 진입만으로 익절되고
+   * 지는 거래는 물타기까지 체결된 뒤 손절난다. 잴 수 없으면 null.
+   */
+  payoffRatio: number | null;
+  /**
+   * 실측 손익비로 역산한 필요 승률 = 1 / (1 + payoffRatio).
+   *
+   * 실제 승률이 이 값과 같으면 기대값이 정확히 0이다. 이론 손익분기 승률은
+   * 체결 가정이 들어가 실전보다 15~20%p 낙관적이었다 — 이쪽이 진짜 숫자다.
+   */
+  requiredWinRate: number | null;
   /** 트레이드당 평균 순손익 (USDT) */
   expectancy: number;
   /** 자본 대비 최대 낙폭 비율 */

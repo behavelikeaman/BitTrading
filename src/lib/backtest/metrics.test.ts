@@ -168,3 +168,68 @@ describe('metricsBySetup — 셋업별로 따로 재야 경험칙이 검증된�
     expect(metricsBySetup([], 5000)).toEqual({});
   });
 });
+
+describe('computeMetrics — 실측 손익비와 필요 승률', () => {
+  // 이론 손익비(목표 R배수)는 "전량 체결 뒤 목표에 닿는다"를 가정한다. 실제로는
+  // 이기는 거래가 1차 진입만으로 익절되고 지는 거래는 물타기까지 다 맞고 손절나서
+  // 평균 승과 평균 패가 비대칭이 된다. 그 비대칭을 반영한 필요 승률이 진짜 숫자다.
+  it('평균 승·평균 패를 각각 낸다 (평균 패는 양수)', () => {
+    const m = computeMetrics([trade(100), trade(200), trade(-50)], 5000);
+    expect(m.averageWin).toBeCloseTo(150, 10);
+    expect(m.averageLoss).toBeCloseTo(50, 10);
+  });
+
+  it('실측 손익비는 평균 승 / 평균 패다', () => {
+    const m = computeMetrics([trade(100), trade(200), trade(-50)], 5000);
+    expect(m.payoffRatio).toBeCloseTo(3, 10);
+  });
+
+  it('필요 승률은 1 / (1 + 실측 손익비)다', () => {
+    const m = computeMetrics([trade(100), trade(200), trade(-50)], 5000);
+    expect(m.requiredWinRate).toBeCloseTo(1 / 4, 10);
+  });
+
+  it('필요 승률과 실제 승률이 같으면 기대값이 0이다', () => {
+    // 이 성질이 이 지표의 존재 이유다. 실제 승률이 이 값을 넘으면 벌고,
+    // 못 미치면 잃는다 — 이론 손익분기 승률과 달리 가정이 들어가지 않는다.
+    const trades = [trade(300), trade(-100), trade(-100), trade(-100)];
+    const m = computeMetrics(trades, 5000);
+    expect(m.requiredWinRate).toBeCloseTo(m.winRate, 10);
+    expect(m.expectancy).toBeCloseTo(0, 10);
+  });
+
+  it('실제 승률이 필요 승률에 못 미치면 기대값이 음수다', () => {
+    // 6개월 백테스트가 이 자리였다. 이론 손익분기(54%)는 넘겼는데 계좌는 녹았다.
+    const trades = [trade(60), trade(60), trade(-100), trade(-100)];
+    const m = computeMetrics(trades, 5000);
+    expect(m.winRate).toBeCloseTo(0.5, 10);
+    expect(m.requiredWinRate!).toBeGreaterThan(m.winRate);
+    expect(m.expectancy).toBeLessThan(0);
+  });
+
+  it('진 트레이드가 없으면 실측할 수 없으므로 null이다', () => {
+    const m = computeMetrics([trade(10), trade(20)], 5000);
+    expect(m.payoffRatio).toBeNull();
+    expect(m.requiredWinRate).toBeNull();
+  });
+
+  it('이긴 트레이드가 없으면 필요 승률은 100%다', () => {
+    const m = computeMetrics([trade(-10), trade(-20)], 5000);
+    expect(m.payoffRatio).toBe(0);
+    expect(m.requiredWinRate).toBe(1);
+  });
+
+  it('트레이드가 0개면 null이다', () => {
+    const m = computeMetrics([], 5000);
+    expect(m.payoffRatio).toBeNull();
+    expect(m.requiredWinRate).toBeNull();
+  });
+
+  it('JSON 왕복 후에도 보존된다', () => {
+    // Infinity를 쓰면 JSON에서 null이 되어 "무한대"와 "측정 불가"가 섞인다.
+    const m = computeMetrics([trade(10), trade(20)], 5000);
+    const roundTripped = JSON.parse(JSON.stringify(m)) as typeof m;
+    expect(roundTripped.payoffRatio).toBe(m.payoffRatio);
+    expect(roundTripped.requiredWinRate).toBe(m.requiredWinRate);
+  });
+});

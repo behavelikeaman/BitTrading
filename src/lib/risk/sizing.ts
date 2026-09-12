@@ -4,6 +4,7 @@ import {
   ladderLossAtStop,
   ladderPrices,
   ladderStopPrice,
+  SINGLE_ENTRY,
   type LadderPlanInput,
 } from '@/lib/risk/ladder';
 import {
@@ -24,13 +25,6 @@ export const DEFAULT_ACCOUNT: AccountConfig = {
   atrStopMultiple: 1.2,
   targetRMultiple: 1.38,
   costSource: 'default',
-};
-
-/** 단일 진입(물타기 없음) */
-const SINGLE_LEG: LadderPlanInput = {
-  addCount: 0,
-  addSpacingAtr: 0,
-  weights: [1],
 };
 
 /** 시장가 매매의 편도 체결비용 = 수수료 + 슬리피지 (ADR-014) */
@@ -69,7 +63,7 @@ export function planPosition(input: PlanPositionInput): PositionPlan {
     entryPrice,
     atr,
     account,
-    ladder = SINGLE_LEG,
+    ladder = SINGLE_ENTRY,
     mmrTiers = null,
     qtyStep = 0.001,
   } = input;

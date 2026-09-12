@@ -14,8 +14,10 @@ import {
 
 interface Props {
   result: BacktestResult;
-  /** 이론 손익분기 승률. 실제 승률과 나란히 놓는다. */
+  /** 이론 손익분기 승률. 전량 체결·목표 도달을 가정한 값이다. */
   breakEvenWinRate: number | null;
+  /** 이론 손익비 (목표 R배수). 실측 손익비와 나란히 놓는다. */
+  targetRMultiple: number;
   startingEquity: number;
 }
 
@@ -57,7 +59,12 @@ const REASON_LABEL: Record<string, string> = {
   'end-of-data': '데이터 끝',
 };
 
-export function BacktestReport({ result, breakEvenWinRate, startingEquity }: Props) {
+export function BacktestReport({
+  result,
+  breakEvenWinRate,
+  targetRMultiple,
+  startingEquity,
+}: Props) {
   const netPnl = result.finalEquity - startingEquity;
   // 건수 많은 셋업부터. 표본이 큰 쪽이 먼저 읽혀야 한다.
   const setupRows = (
@@ -68,21 +75,29 @@ export function BacktestReport({ result, breakEvenWinRate, startingEquity }: Pro
   const grossProfit = result.trades
     .filter((t) => t.netPnl > 0)
     .reduce((s, t) => s + t.netPnl, 0);
-  const beatsBreakEven =
-    breakEvenWinRate === null ? null : result.winRate >= breakEvenWinRate;
+  // 판정 기준은 **실측** 필요 승률이다. 이론 손익분기 승률은 전량 체결 뒤
+  // 목표에 닿는 경우만 세기 때문에 실전보다 15~20%p 낙관적이었다. 그 값으로
+  // 초록불을 켜는 동안 6개월 백테스트의 계좌는 97% 녹았다.
+  const required = result.requiredWinRate;
+  const beatsRequired = required === null ? null : result.winRate >= required;
+  // 이론이 실측보다 얼마나 낙관적인가. 이 간극이 위 사고의 정체다.
+  const optimismGap =
+    required === null || breakEvenWinRate === null
+      ? null
+      : required - breakEvenWinRate;
 
   return (
     <div className="space-y-4">
       {/* 이 설정으로 돈을 벌 수 있는가 — 가장 직접적인 답 */}
       <section
         className={`rounded-lg border p-4 ${
-          beatsBreakEven === false
+          beatsRequired === false
             ? 'border-[var(--color-short)]/50 bg-[var(--color-short)]/5'
             : 'border-neutral-800 bg-neutral-950'
         }`}
       >
         <h2 className="mb-3 text-sm font-semibold text-neutral-300">
-          실제 승률 vs 손익분기 승률
+          실제 승률 vs 필요 승률
         </h2>
         <div className="flex flex-wrap items-baseline gap-6">
           <div>
@@ -94,21 +109,47 @@ export function BacktestReport({ result, breakEvenWinRate, startingEquity }: Pro
           <div className="text-2xl text-neutral-500">vs</div>
           <div>
             <div className="text-xs font-medium text-neutral-400">
-              손익분기 승률
+              필요 승률 (실측)
             </div>
-            <div className="text-3xl font-bold text-neutral-400">
-              {breakEvenWinRate === null ? '—' : formatPct(breakEvenWinRate)}
+            <div className="text-3xl font-bold text-neutral-200">
+              {formatPct(required)}
+            </div>
+            <div className="mt-0.5 text-[11px] text-neutral-500">
+              평균 승 {formatUsd(result.averageWin)} / 평균 패{' '}
+              {formatUsd(result.averageLoss)} = 실측 손익비{' '}
+              {formatProfitFactor(result.payoffRatio, result.totalTrades > 0)}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs font-medium text-neutral-500">
+              손익분기 승률 (이론)
+            </div>
+            <div className="text-xl font-semibold text-neutral-500">
+              {formatPct(breakEvenWinRate)}
+            </div>
+            <div className="mt-0.5 text-[11px] text-neutral-600">
+              전량 체결 후 목표({targetRMultiple}R) 도달 가정
             </div>
           </div>
         </div>
-        {beatsBreakEven === false && (
+        {beatsRequired === false && (
           <p className="mt-3 text-sm text-[var(--color-short)]">
-            실제 승률이 손익분기에 못 미친다. 이 설정으로는 장기적으로 손실이다.
+            실제 승률이 필요 승률에 못 미친다. 이 설정으로는 장기적으로 손실이다.
           </p>
         )}
-        {beatsBreakEven === true && (
+        {beatsRequired === true && (
           <p className="mt-3 text-sm text-[var(--color-long)]">
-            손익분기를 넘겼다. 다만 표본이 {result.totalTrades}건이라는 점을 감안하라.
+            실측 기준으로 손익분기를 넘겼다. 다만 표본이 {result.totalTrades}건이라는
+            점을 감안하라.
+          </p>
+        )}
+        {optimismGap !== null && optimismGap > 0.02 && (
+          <p className="mt-2 text-xs text-[var(--color-warn)]">
+            이론 손익분기 승률이 실측보다 {formatPct(optimismGap, 1)}p 낙관적이다.
+            이론값은 목표 {targetRMultiple}R을 손익비로 쓰지만 실제로 잰 손익비는{' '}
+            {formatProfitFactor(result.payoffRatio, result.totalTrades > 0)}였다 —
+            이기는 거래는 1차 진입만 체결된 채 익절하고 지는 거래는 물타기까지
+            체결된 뒤 손절나기 때문이다. 판단은 실측값으로 하라.
           </p>
         )}
       </section>
@@ -132,6 +173,16 @@ export function BacktestReport({ result, breakEvenWinRate, startingEquity }: Pro
           hint={`시작 ${formatUsd(startingEquity)}`}
         />
         <Stat label="손익비 (PF)" value={formatProfitFactor(result.profitFactor, result.totalTrades > 0)} />
+        <Stat
+          label="실측 손익비 (평균승/평균패)"
+          value={formatProfitFactor(result.payoffRatio, result.totalTrades > 0)}
+          hint={`이론 ${targetRMultiple}R`}
+          tone={
+            result.payoffRatio !== null && result.payoffRatio < targetRMultiple * 0.7
+              ? 'warn'
+              : undefined
+          }
+        />
         <Stat
           label="기대값 / 트레이드"
           value={`${formatSignedUsd(result.expectancy)} USDT`}
@@ -192,6 +243,7 @@ export function BacktestReport({ result, breakEvenWinRate, startingEquity }: Pro
                   <th className="py-1 text-left">셋업</th>
                   <th className="py-1 text-right">건수</th>
                   <th className="py-1 text-right">승률</th>
+                  <th className="py-1 text-right">필요 승률</th>
                   <th className="py-1 text-right">손익비</th>
                   <th className="py-1 text-right">기대값/건</th>
                   <th className="py-1 text-right">최대 낙폭</th>
@@ -209,6 +261,15 @@ export function BacktestReport({ result, breakEvenWinRate, startingEquity }: Pro
                     </td>
                     <td className="text-right tabular-nums text-neutral-300">
                       {formatPct(m.winRate)}
+                    </td>
+                    <td
+                      className={`text-right tabular-nums ${
+                        m.requiredWinRate !== null && m.winRate < m.requiredWinRate
+                          ? 'text-[var(--color-short)]'
+                          : 'text-neutral-400'
+                      }`}
+                    >
+                      {formatPct(m.requiredWinRate)}
                     </td>
                     <td className="text-right tabular-nums text-neutral-300">
                       {formatProfitFactor(m.profitFactor, m.totalTrades > 0)}

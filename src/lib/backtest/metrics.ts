@@ -21,6 +21,10 @@ export function computeMetrics(
       totalTrades: 0,
       winRate: 0,
       profitFactor: null,
+      averageWin: 0,
+      averageLoss: 0,
+      payoffRatio: null,
+      requiredWinRate: null,
       expectancy: 0,
       maxDrawdown: 0,
       maxConsecutiveLosses: 0,
@@ -72,6 +76,17 @@ export function computeMetrics(
   }
 
   const totalNet = grossProfit - grossLoss;
+  const losses = trades.length - wins;
+
+  // 실측 손익비 = 평균 승 / 평균 패. 목표 R배수(이론 손익비)와 달리 "전량
+  // 체결 뒤 목표에 닿는다"를 가정하지 않는다. 실제로는 이기는 거래가 1차
+  // 진입만으로 익절되고 지는 거래는 물타기까지 전량 체결된 뒤 손절나서 둘이
+  // 크게 벌어진다. 6개월 백테스트에서 실측 손익비는 이론의 25~30%였다.
+  const averageWin = wins === 0 ? 0 : grossProfit / wins;
+  const averageLoss = losses === 0 ? 0 : grossLoss / losses;
+  // 진 거래가 없거나 평균 패가 0이면 잴 기준이 없다. Infinity는 JSON에서
+  // null이 되어 "무한대"와 "측정 불가"가 섞이므로 명시적으로 null을 쓴다.
+  const payoffRatio = averageLoss > 0 ? averageWin / averageLoss : null;
 
   return {
     totalTrades: trades.length,
@@ -79,6 +94,12 @@ export function computeMetrics(
     // 손실이 없으면 손익비가 정의되지 않는다. Infinity는 JSON에서 null이
     // 되어버리므로 명시적으로 null을 반환하고 화면이 ∞로 그린다.
     profitFactor: grossLoss === 0 ? null : grossProfit / grossLoss,
+    averageWin,
+    averageLoss,
+    payoffRatio,
+    // 실측 손익비로 역산한 필요 승률. 이 값과 실제 승률이 같으면 기대값이
+    // 정확히 0이다 — 가정이 들어가지 않은 진짜 손익분기점이다.
+    requiredWinRate: payoffRatio === null ? null : 1 / (1 + payoffRatio),
     expectancy: totalNet / trades.length,
     maxDrawdown,
     maxConsecutiveLosses,

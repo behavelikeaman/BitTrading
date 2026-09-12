@@ -17,7 +17,13 @@ import type { PaperResponse } from '@/app/api/paper/route';
 import type { DivergenceResponse } from '@/app/api/paper/divergence/route';
 
 const POLL_MS = 20_000;
-/** 기본 설정(손절 0.42%, 목표 1.38R, 왕복 마찰 0.12%)의 손익분기 승률 */
+/**
+ * 기본 설정(손절 0.42%, 목표 1.38R, 왕복 마찰 0.12%)의 **이론** 손익분기 승률.
+ *
+ * 전량 체결 뒤 목표에 닿는 경우만 세는 값이라 실전보다 낙관적이다. 신뢰구간은
+ * 표본과 무관한 기준선이 있어야 의미가 있어 이 값으로 계속 재지만, 실제로
+ * 필요한 승률은 실측 손익비에서 나온다 (아래 실측 필요 승률).
+ */
 const DEFAULT_BREAK_EVEN = 0.54;
 
 function Stat({
@@ -336,9 +342,31 @@ export default function PaperPage() {
                   }`}
                 >
                   {interval.conclusive
-                    ? `신뢰구간 전체가 손익분기 ${formatPct(DEFAULT_BREAK_EVEN)} 위에 있다.`
-                    : `표본 ${metrics!.totalTrades}건으로는 손익분기 ${formatPct(DEFAULT_BREAK_EVEN)}를 넘었는지 판정할 수 없다.`}
+                    ? `신뢰구간 전체가 이론 손익분기 ${formatPct(DEFAULT_BREAK_EVEN)} 위에 있다.`
+                    : `표본 ${metrics!.totalTrades}건으로는 이론 손익분기 ${formatPct(DEFAULT_BREAK_EVEN)}를 넘었는지 판정할 수 없다.`}
                 </p>
+                {/*
+                  이론 손익분기를 넘겨도 실측 손익비가 무너져 있으면 계좌는 녹는다.
+                  6개월 백테스트가 정확히 그랬다 — 초록불이 켜진 채 97%를 잃었다.
+                  실측값을 같은 자리에 놓아야 그 착시가 생기지 않는다.
+                */}
+                {metrics!.requiredWinRate !== null && (
+                  <p
+                    className={`mt-1 text-sm ${
+                      metrics!.winRate < metrics!.requiredWinRate
+                        ? 'text-[var(--color-short)]'
+                        : 'text-neutral-400'
+                    }`}
+                  >
+                    실측 필요 승률 {formatPct(metrics!.requiredWinRate)} — 평균 승{' '}
+                    {formatUsd(metrics!.averageWin)} / 평균 패{' '}
+                    {formatUsd(metrics!.averageLoss)} (실측 손익비{' '}
+                    {formatProfitFactor(metrics!.payoffRatio, true)}).{' '}
+                    {metrics!.winRate < metrics!.requiredWinRate
+                      ? '실제 승률이 여기에 못 미친다. 이론값이 아니라 이 숫자로 판단하라.'
+                      : '이론값이 아니라 이 숫자가 실제 손익분기점이다.'}
+                  </p>
+                )}
               </>
             )}
           </section>

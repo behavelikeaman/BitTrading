@@ -6,7 +6,7 @@ import { DEFAULT_ENTRY_CONFIG } from '@/lib/signal/entry';
 import { SCORE_ITEM_COUNT } from '@/lib/signal/score';
 import { BacktestReport } from '@/components/BacktestReport';
 import { useLocalStorage } from '@/lib/use-local-storage';
-import { formatPct, formatUsd } from '@/lib/format';
+import { formatPct, formatProfitFactor, formatUsd } from '@/lib/format';
 import { TIMEFRAMES, timeframeSpec, type Timeframe } from '@/lib/timeframe';
 import type { BacktestResult } from '@/types';
 
@@ -27,6 +27,7 @@ interface Params {
   entryType: 'market' | 'limit';
   limitValidBars: number;
   maxHoldBars: number;
+  ladderEnabled: boolean;
 }
 
 const DEFAULTS: Params = {
@@ -49,6 +50,7 @@ const DEFAULTS: Params = {
   entryType: 'market',
   limitValidBars: 3,
   maxHoldBars: 36,
+  ladderEnabled: true,
 };
 
 /**
@@ -65,13 +67,17 @@ function theoreticalBreakEven(p: Params): number {
   return (stopPct + friction) / (targetPct + stopPct);
 }
 
-function buildBody(p: Params, entryType: 'market' | 'limit') {
+function buildBody(
+  p: Params,
+  over: { entryType?: 'market' | 'limit'; ladderEnabled?: boolean } = {},
+) {
   return {
     from: p.from,
     to: p.to,
     params: {
       timeframe: p.timeframe,
-      entryType,
+      entryType: over.entryType ?? p.entryType,
+      ladderEnabled: over.ladderEnabled ?? p.ladderEnabled,
       limitValidBars: p.limitValidBars,
       maxHoldBars: p.maxHoldBars,
       account: {
@@ -128,8 +134,12 @@ export default function BacktestPage() {
   const [params, setParams] = useLocalStorage('bt.backtest.v2', DEFAULTS);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [compare, setCompare] = useState<{
-    market: BacktestResult;
-    limit: BacktestResult;
+    title: string;
+    labelA: string;
+    labelB: string;
+    a: BacktestResult;
+    b: BacktestResult;
+    note: string;
   } | null>(null);
   const [error, setError] = useState<{ message: string; hint?: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -140,7 +150,7 @@ export default function BacktestPage() {
     if (Number.isFinite(n)) setParams({ ...params, [key]: n });
   };
 
-  const run = async (mode: 'single' | 'compare') => {
+  const run = async (mode: 'single' | 'entry-type' | 'ladder') => {
     setLoading(true);
     setError(null);
     setResult(null);
@@ -149,11 +159,13 @@ export default function BacktestPage() {
     const timer = setInterval(() => setElapsed(Date.now() - started), 200);
 
     try {
-      const call = async (entryType: 'market' | 'limit') => {
+      const call = async (
+        over: { entryType?: 'market' | 'limit'; ladderEnabled?: boolean } = {},
+      ) => {
         const res = await fetch('/api/backtest', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(buildBody(params, entryType)),
+          body: JSON.stringify(buildBody(params, over)),
         });
         const body = (await res.json()) as
           | BacktestResult
@@ -163,10 +175,33 @@ export default function BacktestPage() {
       };
 
       if (mode === 'single') {
-        setResult(await call(params.entryType));
+        setResult(await call());
+      } else if (mode === 'entry-type') {
+        const [a, b] = await Promise.all([
+          call({ entryType: 'market' }),
+          call({ entryType: 'limit' }),
+        ]);
+        setCompare({
+          title: '시장가 vs 지정가',
+          labelA: '시장가',
+          labelB: '지정가',
+          a,
+          b,
+          note: '지정가는 수수료가 싸지만 되돌림을 기다리다 가장 크게 달아난 트레이드를 놓친다. 체결률과 순손익을 함께 봐야 그 역선택 크기가 보인다.',
+        });
       } else {
-        const [market, limit] = await Promise.all([call('market'), call('limit')]);
-        setCompare({ market, limit });
+        const [a, b] = await Promise.all([
+          call({ ladderEnabled: true }),
+          call({ ladderEnabled: false }),
+        ]);
+        setCompare({
+          title: '물타기 on vs off',
+          labelA: '물타기 사용',
+          labelB: '1차 진입만',
+          a,
+          b,
+          note: '실측 손익비가 물타기를 끈 쪽에서 이론(목표 R배수)에 가까워지면, 손익비가 무너진 원인은 물타기의 비대칭이다 — 이기는 거래는 1차 진입만 체결된 채 익절하고 지는 거래는 레그가 다 채워진 뒤 손절난다. 두 열의 평균 승·평균 패를 나란히 보라.',
+        });
       }
     } catch (e) {
       const err = e as { error?: string; hint?: string; message?: string };
@@ -260,6 +295,21 @@ export default function BacktestPage() {
               <option value="limit">지정가</option>
             </select>
           </label>
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-wide text-neutral-500">
+              물타기
+            </span>
+            <select
+              value={params.ladderEnabled ? 'on' : 'off'}
+              onChange={(e) =>
+                setParams({ ...params, ladderEnabled: e.target.value === 'on' })
+              }
+              className="w-full rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-sm text-neutral-200"
+            >
+              <option value="on">사용 (확신 1회 · 약간 2회)</option>
+              <option value="off">끔 (1차 진입만)</option>
+            </select>
+          </label>
           <Field label="지정가 유효 봉" value={params.limitValidBars} step={1} onChange={num('limitValidBars')} />
           <Field label="최대 보유 봉" value={params.maxHoldBars} step={1} onChange={num('maxHoldBars')} />
         </div>
@@ -283,11 +333,19 @@ export default function BacktestPage() {
           </button>
           <button
             type="button"
-            onClick={() => void run('compare')}
+            onClick={() => void run('entry-type')}
             disabled={loading}
             className="rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-900 disabled:opacity-40"
           >
             시장가 vs 지정가 비교
+          </button>
+          <button
+            type="button"
+            onClick={() => void run('ladder')}
+            disabled={loading}
+            className="rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-900 disabled:opacity-40"
+          >
+            물타기 on/off 비교
           </button>
         </div>
       </section>
@@ -311,32 +369,54 @@ export default function BacktestPage() {
       {compare !== null && (
         <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
           <h2 className="mb-3 text-sm font-semibold text-neutral-300">
-            시장가 vs 지정가
+            {compare.title}
           </h2>
           <table className="w-full text-sm [&_td]:px-2 [&_th]:px-2">
             <thead className="text-neutral-500">
               <tr>
                 <th className="py-1 text-left text-xs">항목</th>
-                <th className="py-1 text-right text-xs">시장가</th>
-                <th className="py-1 text-right text-xs">지정가</th>
+                <th className="py-1 text-right text-xs">{compare.labelA}</th>
+                <th className="py-1 text-right text-xs">{compare.labelB}</th>
               </tr>
             </thead>
             <tbody>
               {[
-                ['신호 수', String(compare.market.signalCount), String(compare.limit.signalCount)],
-                ['체결률', formatPct(compare.market.fillRate), formatPct(compare.limit.fillRate)],
-                ['트레이드', String(compare.market.totalTrades), String(compare.limit.totalTrades)],
-                ['승률', formatPct(compare.market.winRate), formatPct(compare.limit.winRate)],
+                ['신호 수', String(compare.a.signalCount), String(compare.b.signalCount)],
+                ['체결률', formatPct(compare.a.fillRate), formatPct(compare.b.fillRate)],
+                ['트레이드', String(compare.a.totalTrades), String(compare.b.totalTrades)],
+                ['승률', formatPct(compare.a.winRate), formatPct(compare.b.winRate)],
+                // 물타기 가설은 이 세 줄에서 갈린다. 승률이 같아도 평균 승·패가
+                // 벌어져 있으면 필요 승률이 올라가고 계좌는 녹는다.
+                [
+                  '필요 승률 (실측)',
+                  formatPct(compare.a.requiredWinRate),
+                  formatPct(compare.b.requiredWinRate),
+                ],
+                [
+                  '실측 손익비',
+                  formatProfitFactor(compare.a.payoffRatio, compare.a.totalTrades > 0),
+                  formatProfitFactor(compare.b.payoffRatio, compare.b.totalTrades > 0),
+                ],
+                [
+                  '평균 승 / 평균 패',
+                  `${formatUsd(compare.a.averageWin)} / ${formatUsd(compare.a.averageLoss)}`,
+                  `${formatUsd(compare.b.averageWin)} / ${formatUsd(compare.b.averageLoss)}`,
+                ],
+                [
+                  '기대값/건',
+                  formatUsd(compare.a.expectancy),
+                  formatUsd(compare.b.expectancy),
+                ],
                 [
                   '순손익',
-                  formatUsd(compare.market.finalEquity - params.equity),
-                  formatUsd(compare.limit.finalEquity - params.equity),
+                  formatUsd(compare.a.finalEquity - params.equity),
+                  formatUsd(compare.b.finalEquity - params.equity),
                 ],
-                ['총 수수료', formatUsd(compare.market.totalFees), formatUsd(compare.limit.totalFees)],
+                ['총 수수료', formatUsd(compare.a.totalFees), formatUsd(compare.b.totalFees)],
                 [
                   '청산',
-                  `${compare.market.liquidationCount}회`,
-                  `${compare.limit.liquidationCount}회`,
+                  `${compare.a.liquidationCount}회`,
+                  `${compare.b.liquidationCount}회`,
                 ],
               ].map(([label, a, b]) => (
                 <tr key={label} className="border-t border-neutral-900">
@@ -347,9 +427,10 @@ export default function BacktestPage() {
               ))}
             </tbody>
           </table>
-          <p className="mt-3 text-xs text-neutral-500">
-            지정가는 수수료가 싸지만 되돌림을 기다리다 가장 크게 달아난 트레이드를
-            놓친다. 체결률과 순손익을 함께 봐야 그 역선택 크기가 보인다.
+          <p className="mt-3 text-xs text-neutral-500">{compare.note}</p>
+          <p className="mt-2 text-xs text-neutral-500">
+            이론 손익비는 목표 {params.targetRMultiple}R이다. 실측 손익비가 그보다
+            한참 낮으면 화면의 이론 손익분기 승률을 믿고 매매 여부를 판단할 수 없다.
           </p>
         </section>
       )}
@@ -358,6 +439,7 @@ export default function BacktestPage() {
         <BacktestReport
           result={result}
           breakEvenWinRate={breakEven}
+          targetRMultiple={params.targetRMultiple}
           startingEquity={params.equity}
         />
       )}

@@ -9,6 +9,13 @@ export interface LadderPlanInput {
   weights: number[];
 }
 
+/** 물타기 없는 단일 진입. 래더를 끈 백테스트와 planPosition 기본값이 함께 쓴다. */
+export const SINGLE_ENTRY: LadderPlanInput = {
+  addCount: 0,
+  addSpacingAtr: 0,
+  weights: [1],
+};
+
 export const DEFAULT_LADDER_HIGH: LadderPlanInput = {
   addCount: 1,
   addSpacingAtr: 0.6,

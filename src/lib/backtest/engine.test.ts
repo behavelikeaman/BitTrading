@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { runBacktest } from '@/lib/backtest/engine';
+import { DEFAULT_BACKTEST_PARAMS, runBacktest } from '@/lib/backtest/engine';
 import { scenario, testParams, TEST_ACCOUNT } from '@/lib/backtest/fixtures';
 import { DEFAULT_ENTRY_CONFIG } from '@/lib/signal/entry';
 
@@ -168,6 +168,57 @@ describe('물타기 레그', () => {
     const a = lastTrade(runBacktest({ ...withLeg, params: lowLeverage() }));
     const b = lastTrade(runBacktest({ ...withoutLeg, params: lowLeverage() }));
     expect(a.exitPrice).toBeLessThan(b.exitPrice);
+  });
+});
+
+describe('물타기 on/off (ladderEnabled)', () => {
+  // 6개월 백테스트에서 실측 손익비가 이론의 25~30%에 그쳤다. 가설은 물타기의
+  // 비대칭이다 — 이기는 거래는 1차 진입만 체결된 채 익절하고, 지는 거래는
+  // 물타기까지 전량 체결된 뒤 손절난다. 레그 1개로 돌려야 가설을 검증할 수 있다.
+  const touchesLeg = scenario([
+    bar(ENTRY, ENTRY + 0.3, ENTRY - 0.3, ENTRY),
+    bar(ENTRY, ENTRY + 0.2, 126.0, 127.0),
+    bar(127.0, 132.0, 126.9, 131.5),
+  ]);
+
+  it('기본값은 물타기 사용이다', () => {
+    expect(DEFAULT_BACKTEST_PARAMS.ladderEnabled).toBe(true);
+  });
+
+  it('끄면 레그 가격에 닿아도 레그가 하나뿐이다', () => {
+    const on = lastTrade(runBacktest({ ...touchesLeg, params: lowLeverage() }));
+    const off = lastTrade(
+      runBacktest({ ...touchesLeg, params: lowLeverage({ ladderEnabled: false }) }),
+    );
+    expect(on.legs).toHaveLength(2);
+    expect(off.legs).toHaveLength(1);
+  });
+
+  it('끄면 평단이 1차 진입가 그대로다', () => {
+    const off = lastTrade(
+      runBacktest({ ...touchesLeg, params: lowLeverage({ ladderEnabled: false }) }),
+    );
+    expect(off.averageEntryPrice).toBeCloseTo(ENTRY, 6);
+  });
+
+  it('끄면 1차 진입만으로 익절한 거래의 순이익이 더 크다', () => {
+    // 비대칭의 정체. 물타기를 켜면 리스크 예산이 레그들에 나뉘어 1차 진입
+    // 명목가가 작아진다. 2차가 안 채워진 채 익절하면 절반짜리로 버는데,
+    // 손절은 전량 체결된 뒤에 맞으므로 온전히 잃는다.
+    const onlyFirstLegFills = scenario([
+      bar(ENTRY, ENTRY + 0.3, ENTRY - 0.3, ENTRY),
+      bar(ENTRY, 132.5, 127.5, 132.0),
+    ]);
+    const on = lastTrade(runBacktest({ ...onlyFirstLegFills, params: lowLeverage() }));
+    const off = lastTrade(
+      runBacktest({
+        ...onlyFirstLegFills,
+        params: lowLeverage({ ladderEnabled: false }),
+      }),
+    );
+    expect(on.exitReason).toBe('take-profit');
+    expect(off.exitReason).toBe('take-profit');
+    expect(off.netPnl).toBeGreaterThan(on.netPnl);
   });
 });
 

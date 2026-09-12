@@ -9,6 +9,7 @@ import { evaluateEntry, type EntryConfig } from '@/lib/signal/entry';
 import {
   DEFAULT_LADDER_HIGH,
   DEFAULT_LADDER_MEDIUM,
+  SINGLE_ENTRY,
   type LadderPlanInput,
 } from '@/lib/risk/ladder';
 import { INITIAL_GUARD, resetDaily, updateGuard } from '@/lib/risk/guard';
@@ -34,6 +35,15 @@ export interface BacktestParams {
   timeframe: Timeframe;
   ladderHigh: LadderPlanInput;
   ladderMedium: LadderPlanInput;
+  /**
+   * 물타기 사용 여부. false면 확신도와 무관하게 1차 진입만 한다.
+   *
+   * 물타기는 승패를 비대칭으로 만든다 — 이기는 거래는 1차 진입만 체결된 채
+   * 익절하고, 지는 거래는 레그가 다 채워진 뒤 손절난다. 그래서 실측 손익비가
+   * 이론(목표 R배수)의 25~30%까지 내려갔다. 끄고 돌려야 얼마나 물타기 탓인지
+   * 갈라낼 수 있다.
+   */
+  ladderEnabled: boolean;
   /** 시장가는 다음 캔들 시가 체결, 지정가는 되돌림 대기 (ADR-015) */
   entryType: 'market' | 'limit';
   /** entryType='limit'일 때 지정가 유효 캔들 수 */
@@ -53,6 +63,7 @@ export const DEFAULT_BACKTEST_PARAMS: Omit<BacktestParams, 'account' | 'entry'> 
   timeframe: '5m',
   ladderHigh: DEFAULT_LADDER_HIGH,
   ladderMedium: DEFAULT_LADDER_MEDIUM,
+  ladderEnabled: true,
   entryType: 'market',
   limitValidBars: 3,
   fundingRatePerInterval: 0.0001,
@@ -67,8 +78,8 @@ export function toExecutionConfig(params: BacktestParams): ExecutionConfig {
   return {
     account: params.account,
     barMs: timeframeSpec(params.timeframe).barMs,
-    ladderHigh: params.ladderHigh,
-    ladderMedium: params.ladderMedium,
+    ladderHigh: params.ladderEnabled ? params.ladderHigh : SINGLE_ENTRY,
+    ladderMedium: params.ladderEnabled ? params.ladderMedium : SINGLE_ENTRY,
     entryType: params.entryType,
     fundingRatePerInterval: params.fundingRatePerInterval,
     maxHoldBars: params.maxHoldBars,
