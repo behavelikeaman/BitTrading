@@ -140,7 +140,7 @@ async function main(): Promise<void> {
       for (const candle of todo) {
         const day = Math.floor(candle.openTime / MS_DAY);
         if (state.currentDay !== -1 && day !== state.currentDay) {
-          state = { ...state, guard: resetDaily(state.guard) };
+          state = { ...state, guard: resetDaily() };
         }
         state = { ...state, currentDay: day };
 

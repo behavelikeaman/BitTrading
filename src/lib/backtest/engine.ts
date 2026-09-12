@@ -121,7 +121,7 @@ export function runBacktest(input: {
     // 하루가 바뀌면 일손익만 초기화한다.
     const day = Math.floor(candle.openTime / MS_DAY);
     if (day !== currentDay) {
-      if (currentDay !== -1) guard = resetDaily(guard);
+      if (currentDay !== -1) guard = resetDaily();
       currentDay = day;
     }
 

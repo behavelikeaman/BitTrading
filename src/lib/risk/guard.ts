@@ -34,7 +34,7 @@ export function updateGuard(prev: GuardState, tradePnlPct: number): GuardState {
  * "3연패하면 그날은 쉬고 다음 날 다시 본다"가 이 장치가 모사하려던 행동이고,
  * 일자 초기화가 그것과 맞는다.
  */
-export function resetDaily(guard: GuardState): GuardState {
+export function resetDaily(): GuardState {
   return { consecutiveLosses: 0, dailyPnlPct: 0 };
 }
 
