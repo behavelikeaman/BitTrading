@@ -23,9 +23,19 @@ export function updateGuard(prev: GuardState, tradePnlPct: number): GuardState {
   };
 }
 
-/** 하루가 바뀔 때 일손익만 초기화한다. 연속 손실은 날짜와 무관하게 이어진다. */
+/**
+ * 하루가 바뀌면 서킷브레이커를 푼다 — 일손익과 **연속 손실 카운터 둘 다**.
+ *
+ * 연속 손실을 날짜와 무관하게 이어가면 백테스트·페이퍼에서는 한 번 걸린 뒤
+ * 영영 안 풀린다. 실거래에서는 사람이 버튼을 눌러 초기화하지만 그 사람이
+ * 없기 때문이다. 실제로 6개월 백테스트가 3일치만 돌고 나머지 전 구간에서
+ * 진입이 막힌 채 조용히 끝났다.
+ *
+ * "3연패하면 그날은 쉬고 다음 날 다시 본다"가 이 장치가 모사하려던 행동이고,
+ * 일자 초기화가 그것과 맞는다.
+ */
 export function resetDaily(guard: GuardState): GuardState {
-  return { ...guard, dailyPnlPct: 0 };
+  return { consecutiveLosses: 0, dailyPnlPct: 0 };
 }
 
 /**

@@ -65,9 +65,16 @@ describe('isHalted', () => {
 });
 
 describe('resetDaily', () => {
-  it('일손익만 초기화하고 연속 손실은 유지한다', () => {
-    const g = resetDaily({ consecutiveLosses: 2, dailyPnlPct: -0.05 });
-    expect(g.dailyPnlPct).toBe(0);
-    expect(g.consecutiveLosses).toBe(2);
+  it('일손익을 0으로 되돌린다', () => {
+    const next = resetDaily({ consecutiveLosses: 2, dailyPnlPct: -0.04 });
+    expect(next.dailyPnlPct).toBe(0);
+  });
+
+  it('연속 손실 카운터도 함께 초기화한다', () => {
+    // 서킷브레이커는 사람이 풀어주는 장치다. 백테스트·페이퍼에는 그 사람이
+    // 없어서, 날짜가 바뀌어도 안 풀리면 한 번 걸린 뒤 남은 기간 전체가
+    // 통째로 막힌다. 실제로 6개월 백테스트가 3일치만 돌고 멈췄다.
+    const next = resetDaily({ consecutiveLosses: 3, dailyPnlPct: -0.06 });
+    expect(next.consecutiveLosses).toBe(0);
   });
 });

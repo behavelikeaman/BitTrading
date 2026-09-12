@@ -161,6 +161,19 @@ export function BacktestReport({ result, breakEvenWinRate, startingEquity }: Pro
         <Stat label="총이익" value={`${formatUsd(grossProfit)} USDT`} tone="good" />
       </section>
 
+      {/* 서킷브레이커로 막힌 구간이 크면 이 백테스트는 기간의 일부만 검증한 것이다 */}
+      {result.haltedBars > 0 && (
+        <section className="rounded-lg border border-[var(--color-warn)]/50 bg-[var(--color-warn)]/10 p-3">
+          <p className="text-sm font-semibold text-[var(--color-warn)]">
+            서킷브레이커로 {result.haltedBars.toLocaleString()}봉 동안 진입이 막혔다
+          </p>
+          <p className="mt-1 text-xs text-neutral-400">
+            그 구간은 검증되지 않았다. 연속 손실·일일 손실 한도를 늘리거나, 이 결과를
+            &quot;막히기 전까지의 성적&quot;으로 읽어라.
+          </p>
+        </section>
+      )}
+
       {/* 셋업별 성적 — 전체 평균은 서로 다른 자리를 섞어버린다 (ADR-022) */}
       <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
         <h2 className="mb-1 text-sm font-semibold text-neutral-300">

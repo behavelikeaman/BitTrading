@@ -222,7 +222,7 @@ export interface Trade {
 /** 셋업별 요약. BacktestResult에서 트레이드 목록·신호수를 뺀 지표만 */
 export type TradeMetricsSummary = Omit<
   BacktestResult,
-  'trades' | 'signalCount' | 'fillRate' | 'bySetup'
+  'trades' | 'signalCount' | 'fillRate' | 'bySetup' | 'haltedBars'
 >;
 
 export interface BacktestResult {
@@ -258,4 +258,11 @@ export interface BacktestResult {
    * 여기서만 보인다. 트레이드가 없는 셋업은 키 자체가 없다.
    */
   bySetup: Partial<Record<SetupKind, TradeMetricsSummary>>;
+  /**
+   * 서킷브레이커(연속 손실·일일 손실 한도)로 진입 판정이 막힌 캔들 수.
+   *
+   * 이 값이 크면 백테스트가 실제로는 기간의 일부만 검증한 것이다. 보고하지
+   * 않으면 "신호가 없었다"와 "막혀서 못 봤다"가 구분되지 않는다.
+   */
+  haltedBars: number;
 }

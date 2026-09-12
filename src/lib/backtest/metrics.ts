@@ -4,7 +4,7 @@ import type { SetupKind } from '@/lib/signal/setup';
 /** 신호 수·체결률은 엔진만 알 수 있으므로 여기서는 트레이드에서 나오는 지표만 낸다. */
 export type TradeMetrics = Omit<
   BacktestResult,
-  'trades' | 'signalCount' | 'fillRate' | 'bySetup'
+  'trades' | 'signalCount' | 'fillRate' | 'bySetup' | 'haltedBars'
 >;
 
 /**

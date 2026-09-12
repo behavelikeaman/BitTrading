@@ -105,6 +105,8 @@ export function runBacktest(input: {
   let equity = account.equity;
   let guard: GuardState = INITIAL_GUARD;
   let currentDay = -1;
+  /** 서킷브레이커 때문에 진입 판정을 못 한 캔들 수 */
+  let haltedBars = 0;
   let signalCount = 0;
 
   let pending: PendingOrder | null = null;
@@ -169,6 +171,16 @@ export function runBacktest(input: {
         entry,
       );
 
+      // 서킷브레이커로 막힌 봉을 센다. 세지 않으면 "신호가 없었다"와
+      // "막혀서 못 봤다"가 화면에서 구분되지 않는다. 실제로 6개월 백테스트가
+      // 3일치만 돌고 조용히 끝난 적이 있다.
+      if (
+        signal.blockers.includes('연속 손실 한도') ||
+        signal.blockers.includes('일일 손실 한도')
+      ) {
+        haltedBars += 1;
+      }
+
       const order = createPendingOrder({
         signal,
         candle,
@@ -199,5 +211,6 @@ export function runBacktest(input: {
     signalCount,
     fillRate: signalCount === 0 ? 0 : trades.length / signalCount,
     bySetup: metricsBySetup(trades, account.equity),
+    haltedBars,
   };
 }

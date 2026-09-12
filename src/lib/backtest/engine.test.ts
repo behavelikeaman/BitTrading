@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { runBacktest } from '@/lib/backtest/engine';
 import { scenario, testParams, TEST_ACCOUNT } from '@/lib/backtest/fixtures';
+import { DEFAULT_ENTRY_CONFIG } from '@/lib/signal/entry';
 
 /**
  * 시나리오 픽스처는 워밍업으로 롱 진입을 하나 만든다.
@@ -265,6 +266,28 @@ describe('비용 반영 (ADR-007)', () => {
     );
     expect(t.direction).toBe('long');
     expect(t.funding).toBeGreaterThan(0);
+  });
+});
+
+describe('서킷브레이커', () => {
+  it('연속 손실 한도에 걸린 봉 수를 보고한다', () => {
+    // 막힌 구간을 세지 않으면 "신호가 없었다"와 "막혀서 못 봤다"가
+    // 구분되지 않는다. 6개월 백테스트가 3일치만 돌고 조용히 끝난 적이 있다.
+    const flat = bar(ENTRY, ENTRY + 0.3, ENTRY - 0.3, ENTRY);
+    const s = scenario(new Array(40).fill(flat));
+    const r = runBacktest({
+      ...s,
+      params: lowLeverage({ entry: { ...DEFAULT_ENTRY_CONFIG, consecutiveLossLimit: 0 } }),
+    });
+    expect(r.haltedBars).toBeGreaterThan(0);
+  });
+
+  it('정상 구간에서는 막힌 봉이 없다', () => {
+    const s = scenario([
+      bar(ENTRY, ENTRY + 0.5, ENTRY - 0.5, ENTRY),
+      bar(ENTRY, 132.0, ENTRY - 0.5, 131.8),
+    ]);
+    expect(runBacktest({ ...s, params: lowLeverage() }).haltedBars).toBe(0);
   });
 });
 
