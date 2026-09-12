@@ -12,6 +12,7 @@ import {
   formatUsd,
 } from '@/lib/format';
 import type { PaperResponse } from '@/app/api/paper/route';
+import type { DivergenceResponse } from '@/app/api/paper/divergence/route';
 
 const POLL_MS = 20_000;
 /** 기본 설정(손절 0.42%, 목표 1.38R, 왕복 마찰 0.12%)의 손익분기 승률 */
@@ -58,6 +59,9 @@ const REASON_LABEL: Record<string, string> = {
 export default function PaperPage() {
   const [data, setData] = useState<PaperResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [divergence, setDivergence] = useState<DivergenceResponse | null>(null);
+  const [divError, setDivError] = useState<{ message: string; hint?: string } | null>(null);
+  const [divLoading, setDivLoading] = useState(false);
 
   const poll = useCallback(async () => {
     try {
@@ -86,6 +90,26 @@ export default function PaperPage() {
       body: JSON.stringify({ confirm: true }),
     });
     void poll();
+  };
+
+  const runDivergence = async () => {
+    setDivLoading(true);
+    setDivError(null);
+    setDivergence(null);
+    try {
+      const res = await fetch('/api/paper/divergence', { method: 'POST' });
+      const body = (await res.json()) as DivergenceResponse | { error: string; hint?: string };
+      if (!res.ok) {
+        const err = body as { error: string; hint?: string };
+        setDivError({ message: err.error, hint: err.hint });
+      } else {
+        setDivergence(body as DivergenceResponse);
+      }
+    } catch (e) {
+      setDivError({ message: e instanceof Error ? e.message : '괴리 검사 실패' });
+    } finally {
+      setDivLoading(false);
+    }
   };
 
   const metrics = data?.metrics ?? null;
@@ -195,6 +219,99 @@ export default function PaperPage() {
               value={`${metrics?.liquidationCount ?? 0}회`}
               tone={(metrics?.liquidationCount ?? 0) > 0 ? 'bad' : 'good'}
             />
+          </section>
+
+          {/* 이 화면에서 가장 중요한 숫자는 불일치 건수다. 수익률보다 위에 둔다 (ADR-020) */}
+          <section
+            className={`rounded-lg border p-4 ${
+              divergence === null
+                ? 'border-neutral-800 bg-neutral-950'
+                : divergence.divergences.length === 0
+                  ? 'border-[var(--color-long)]/50 bg-[var(--color-long)]/5'
+                  : 'border-[var(--color-short)]/50 bg-[var(--color-short)]/5'
+            }`}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-neutral-300">
+                괴리 검사 — 백테스트와 같은 판단을 내렸는가
+              </h2>
+              <button
+                type="button"
+                onClick={() => void runDivergence()}
+                disabled={divLoading}
+                className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-900 disabled:opacity-40"
+              >
+                {divLoading ? '대조 중…' : '검사 실행'}
+              </button>
+            </div>
+
+            {divError !== null && (
+              <>
+                <p className="text-sm text-[var(--color-warn)]">{divError.message}</p>
+                {divError.hint !== undefined && (
+                  <code className="mt-1 block select-all rounded bg-neutral-900 px-2 py-1.5 text-xs text-neutral-200">
+                    {divError.hint}
+                  </code>
+                )}
+              </>
+            )}
+
+            {divergence !== null && (
+              <>
+                <div className="flex flex-wrap items-baseline gap-4">
+                  <span
+                    className={`text-3xl font-bold ${
+                      divergence.divergences.length === 0
+                        ? 'text-[var(--color-long)]'
+                        : 'text-[var(--color-short)]'
+                    }`}
+                  >
+                    불일치 {divergence.divergences.length}건
+                  </span>
+                  <span className="text-xs text-neutral-500">
+                    {divergence.from} ~ {divergence.to} · 페이퍼 {divergence.paperTrades}건 vs
+                    백테스트 {divergence.backtestTrades}건 · 짝 일치율{' '}
+                    {formatPct(divergence.matchRate)}
+                  </span>
+                </div>
+
+                {divergence.divergences.length === 0 ? (
+                  <p className="mt-2 text-sm text-neutral-400">
+                    배선이 맞다. 다만 이것은 &quot;엣지가 있다&quot;는 뜻이 아니다.
+                  </p>
+                ) : (
+                  <div className="mt-3 max-h-64 overflow-auto">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-neutral-950 text-neutral-500">
+                        <tr>
+                          <th className="py-1 text-left">종류</th>
+                          <th className="py-1 text-left">시각</th>
+                          <th className="py-1 text-left">페이퍼</th>
+                          <th className="py-1 text-left">백테스트</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {divergence.divergences.map((d, i) => (
+                          <tr key={`${d.at}-${d.kind}-${i}`} className="border-t border-neutral-900">
+                            <td className="py-1 text-[var(--color-short)]">{d.kind}</td>
+                            <td className="text-neutral-400">{formatDateTime(d.at)}</td>
+                            <td className="text-neutral-300">{d.paper}</td>
+                            <td className="text-neutral-300">{d.backtest}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
+
+            {divergence === null && divError === null && !divLoading && (
+              <p className="text-sm text-neutral-500">
+                페이퍼 구간을 백테스트로 재생해 진입 시각·방향·확신도·체결가를 대조한다.
+                불일치가 0건이어야 실거래를 논할 수 있다.
+              </p>
+            )}
           </section>
 
           {/* 승률은 신뢰구간과 함께가 아니면 없는 확신을 만든다 (ADR-020) */}

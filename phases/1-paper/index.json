@@ -45,8 +45,12 @@
     {
       "step": 5,
       "name": "divergence-check",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-12T17:59:33+0900",
+      "completed_at": "2026-09-12T17:59:33+0900",
+      "summary": "괴리 검사 — 이 Phase의 존재 이유(ADR-020). src/lib/paper/divergence.ts(TDD 14개): compareTrades(paper, backtest, tolerance) -> {comparedTrades, divergences, matchRate}. **진입 시각으로 짝을 맞춘다** — 배열 순서로 맞추면 한쪽에 1건만 더 있어도 뒤가 전부 밀려 가짜 불일치가 쏟아진다. 가격은 기본 0.05% 허용오차(페이퍼는 Deepcoin, 백테스트는 Binance라 미세 차이가 정상). 방향·확신도·청산 사유는 허용오차 없이 정확 비교 — 이 값이 다르면 가격 차이가 아니라 로직이 갈라진 것이다. kind 7종: missing-in-backtest/missing-in-paper/direction/conviction/entry-price/exit-reason/exit-price. scripts/divergence.ts + npm run divergence: 일지에서 구간을 추출해 같은 파라미터로 백테스트 재생 후 대조. 과거 데이터가 없으면 fetch-history 명령을 안내하고 정상 종료. 불일치가 있으면 종료 코드 1(게이트 가능). POST /api/paper/divergence — 같은 대조를 화면에서 실행. 데이터 없으면 404 + hint. 페이퍼 화면에 괴리 검사 섹션을 **승률·수익률보다 위에** 배치. 0건이면 초록, 1건 이상이면 빨강. end-to-end 검증(합성 32트레이드): 동일 입력 0건 / 1건 누락 시 missing-in-paper 1건 / 전체 방향 반전 시 direction 32건 / 진입가 0.02% 차이 0건(허용오차 내) / 1% 차이 32건(초과). CLI 종료 코드 확인: 불일치 1건일 때 1, 0건일 때 0. 검증 데이터는 삭제했다. 테스트 14개 추가, 전체 254개 통과. typecheck/build/lint 통과."
     }
   ],
-  "created_at": "2026-09-12T17:48:54+0900"
+  "created_at": "2026-09-12T17:48:54+0900",
+  "completed_at": "2026-09-12T17:59:33+0900"
 }

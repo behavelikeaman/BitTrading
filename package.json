@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
     "fetch-history": "tsx scripts/fetch-history.ts",
-    "paper": "tsx scripts/paper.ts"
+    "paper": "tsx scripts/paper.ts",
+    "divergence": "tsx scripts/divergence.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",
