@@ -5,7 +5,10 @@
     {
       "step": 0,
       "name": "execution-machine",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-12T17:48:54+0900",
+      "completed_at": "2026-09-12T17:48:54+0900",
+      "summary": "체결 상태 기계 추출(ADR-016). src/lib/execution/types.ts: PendingOrder{direction,conviction,score,fromTime,limitPrice,expiresAtTime,atrAtSignal}, OpenPosition{...,entryTime,filled,pending,stopPrice,targetWidth,fees,funding,equityAtEntry,lastFundingBoundary}, ExecutionConfig. 배열 인덱스를 전부 시각(openTime)으로 교체 — 페이퍼는 재시작 후 인덱스의 의미를 잃는다. 상태는 JSON 직렬화 가능(함수·Map·Set·Date 없음). src/lib/execution/machine.ts: stepExecution({candle,pending,position,equity,config})->{pending,position,trade}, createPendingOrder({signal,candle,limitValidBars}), forceClose(position,candle,config,reason), MS_5M export. 판정 규칙 보존: 캔들 내 레벨은 물리적 순서(롱은 높은 가격부터), 레그 체결마다 청산가 재계산, 손절·익절 동시 도달 시 손절, 시장가 슬리피지는 불리한 방향, 청산 손실은 증거금 상한. maxHoldBars는 (candle.openTime - entryTime)/MS_5M로 판정해 캔들이 빠져도 올바른 시점에 타임아웃된다. 모든 상태 전이가 새 객체를 반환하며 입력을 변이하지 않는다(페이퍼가 저장·복원하므로 변이는 버그). src/lib/backtest/engine.ts 리팩터링: 412줄 -> 197줄. 체결 판정이 전부 빠지고 루프·시그널 평가·가드 갱신·자본 복리·집계만 남았다. toExecutionConfig(params) 헬퍼 추가. 등가성 검증: 기존 테스트 196개를 한 줄도 수정하지 않고 전부 통과(git diff --stat으로 테스트 파일 무변경 확인). machine.test.ts 14개 추가: 순수성(같은 입력 2회 동일 출력), 입력 무변이, JSON 왕복 안전성, 시각 기반 타임아웃(캔들 누락 시에도 정확), 체결 규칙 보존(손절 우선·평단 하락 시 목표 하락). src/lib/execution/이 services를 import하지 않음 확인(ADR-021). 전체 210개 통과, build/lint 통과."
     },
     {
       "step": 1,
@@ -32,5 +35,6 @@
       "name": "divergence-check",
       "status": "pending"
     }
-  ]
+  ],
+  "created_at": "2026-09-12T17:48:54+0900"
 }
