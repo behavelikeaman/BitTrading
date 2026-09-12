@@ -38,6 +38,8 @@
 ## 명령어
 npm run dev            # 개발 서버
 npm run build          # 프로덕션 빌드
+npm run typecheck      # tsc --noEmit (build는 테스트 파일을 타입체크하지 않는다)
 npm run lint           # ESLint
 npm run test           # 테스트 (vitest)
 npm run fetch-history  # 과거 캔들 다운로드 (로컬 실행 전용)
+npm run paper          # 페이퍼 트레이딩 티커 (로컬 실행 전용)

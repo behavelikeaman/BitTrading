@@ -21,7 +21,10 @@
     {
       "step": 2,
       "name": "paper-runner",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-12T17:52:56+0900",
+      "completed_at": "2026-09-12T17:52:56+0900",
+      "summary": "페이퍼 티커 CLI. scripts/paper.ts + npm run paper (tsx). 인자: --reset --equity --interval(최소 5초) --help. 루프: loadState(없거나 깨졌으면 createInitialState로 폴백하고 알림) -> Deepcoin 5분봉 300·15분봉 200·펀딩 병렬 조회 -> pendingCandles로 밀린 캔들을 오름차순 전부 추출 -> 캔들마다 (UTC 일자 변경 시 resetDaily) stepExecution -> 트레이드 발생 시 appendJournal + updateGuard + 자본 갱신 -> 플랫이면 evaluateEntry로 시그널 평가 후 createPendingOrder, 신호는 체결 여부와 무관하게 일지에 기록 -> 매 캔들마다 saveState. 시작 시 슬리피지 가정 경고를 출력한다(ADR-019). SIGINT에서 상태를 저장하고 정상 종료한다. 조회 실패는 프로세스를 죽이지 않고 지수 백오프(상한 5분)로 재시도하며, 10회 연속 실패 시 눈에 띄게 경고한다 — 조용히 멈춰 있는 것이 최악이다. 체결 판정은 전부 stepExecution에 위임하며 자체 판정이 없다(ADR-016). 주문 API를 호출하지 않는다(ADR-021). 부수적 발견: npm run build(next build)가 테스트 파일을 타입체크하지 않아 state.test.ts의 잘못된 캐스트를 놓쳤다. npm run typecheck(tsc --noEmit)를 추가하고 CLAUDE.md·README 명령어에 반영했다. AC로 --help 동작 확인. 전체 232개 통과, typecheck/build/lint 통과."
     },
     {
       "step": 3,

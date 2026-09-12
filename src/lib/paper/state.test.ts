@@ -84,7 +84,7 @@ describe('parseState — 방어 (throw 금지)', () => {
   });
 
   it('필수 필드가 없으면 null이다', () => {
-    const s = createInitialState(5000, NOW) as Record<string, unknown>;
+    const s = createInitialState(5000, NOW) as unknown as Record<string, unknown>;
     delete s.equity;
     expect(parseState(s)).toBeNull();
   });
@@ -107,7 +107,7 @@ describe('parseState — 방어 (throw 금지)', () => {
   });
 
   it('updatedAt이 없는 구버전 형태도 startedAt으로 보정한다', () => {
-    const s = createInitialState(5000, NOW) as Record<string, unknown>;
+    const s = createInitialState(5000, NOW) as unknown as Record<string, unknown>;
     delete s.updatedAt;
     expect(parseState(s)?.updatedAt).toBe(NOW);
   });

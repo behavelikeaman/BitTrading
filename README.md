@@ -69,6 +69,7 @@ python3 scripts/execute.py 1-paper --push  # 실행 후 push
 ```bash
 npm run dev            # 개발 서버
 npm run build          # 프로덕션 빌드
+npm run typecheck      # tsc --noEmit (build는 테스트 파일을 검사하지 않는다)
 npm run lint           # ESLint
 npm run test           # vitest
 npm run fetch-history  # 과거 캔들 다운로드 (로컬 실행 전용)

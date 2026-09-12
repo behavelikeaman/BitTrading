@@ -5,10 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "typecheck": "tsc --noEmit",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
-    "fetch-history": "tsx scripts/fetch-history.ts"
+    "fetch-history": "tsx scripts/fetch-history.ts",
+    "paper": "tsx scripts/paper.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",
