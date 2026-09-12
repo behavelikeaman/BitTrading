@@ -14,6 +14,7 @@ import { useLocalStorage } from '@/lib/use-local-storage';
 import { TIMEFRAMES, timeframeSpec, type Timeframe } from '@/lib/timeframe';
 import { TIME_ZONE_LABEL, formatTime } from '@/lib/format';
 import { SCORE_ITEM_COUNT } from '@/lib/signal/score';
+import { costRatePerSide as costRate, DEFAULT_ACCOUNT } from '@/lib/risk/sizing';
 import type { AccountParamsResponse } from '@/app/api/account-params/route';
 import type { SignalResponse } from '@/app/api/signal/route';
 import type { Candle } from '@/types';
@@ -158,6 +159,14 @@ export default function Home() {
     setNotifyEnabled(permission === 'granted');
   };
 
+  // 편도 체결비용은 lib의 정의를 그대로 쓴다 (ADR-014). 화면에서 다시
+  // 더하면 정의가 두 곳이 된다.
+  const costRatePerSide = costRate({
+    ...DEFAULT_ACCOUNT,
+    feeRatePerSide: settings.feeRatePerSide,
+    slippageRatePerSide: settings.slippageRatePerSide,
+  });
+
   const costEstimated =
     accountParams === null ||
     accountParams.feeSource === 'default' ||
@@ -223,6 +232,8 @@ export default function Home() {
             plan={data.plan}
             equity={settings.equity}
             costEstimated={costEstimated}
+            costRatePerSide={costRatePerSide}
+            atrStopMultiple={settings.atrStopMultiple}
           />
           <RiskWarning warnings={data.plan?.warnings ?? []} />
           <ScoreBreakdown items={data.signal.items} score={data.signal.score} />

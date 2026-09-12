@@ -2,6 +2,7 @@
 
 import type { PositionPlan, Signal } from '@/types';
 import { SCORE_ITEM_COUNT } from '@/lib/signal/score';
+import { stopScenarios } from '@/lib/risk/stop-scenarios';
 import {
   formatPct,
   formatPrice,
@@ -15,6 +16,114 @@ interface Props {
   plan: PositionPlan | null;
   equity: number;
   costEstimated: boolean;
+  /** 편도 체결비용(수수료 + 슬리피지). 손절 시나리오 손실 계산에 쓴다. */
+  costRatePerSide: number;
+  /** 현재 설정된 ATR 손절 배수. 시나리오 표에서 "현재 설정"을 표시한다. */
+  atrStopMultiple: number;
+}
+
+/** 비교할 손절 자리 — 현재 설정보다 넓은 쪽으로 늘어놓는다 */
+const SCENARIO_MULTIPLES = [2, 3, 5];
+
+/**
+ * "손절을 여기 두면 승률이 몇 %는 나와야 하는가".
+ *
+ * 재량으로 자르는 사람에게 필요한 건 손절가가 아니라 그 자리의 대가다.
+ * "조금만 더 보자"가 필요 승률 몇 %p짜리 결정인지 진입 전에 보여준다.
+ */
+function StopScenarioTable({
+  plan,
+  atr,
+  costRatePerSide,
+  atrStopMultiple,
+}: {
+  plan: PositionPlan;
+  atr: number;
+  costRatePerSide: number;
+  atrStopMultiple: number;
+}) {
+  const multiples = [
+    atrStopMultiple,
+    ...SCENARIO_MULTIPLES.filter((m) => m > atrStopMultiple),
+  ];
+  const rows = stopScenarios({
+    direction: plan.direction,
+    legs: plan.legs,
+    atr,
+    liquidationPrice: plan.liquidationPrice,
+    totalMargin: plan.totalMargin,
+    rewardAtTarget: plan.rewardAtTarget,
+    costRatePerSide,
+    atrMultiples: multiples,
+  });
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="mt-3 border-t border-neutral-800 pt-3">
+      <h3 className="text-sm font-semibold text-neutral-300">
+        손절을 어디 두느냐가 필요 승률을 정한다
+      </h3>
+      <p className="mt-0.5 mb-2 text-xs text-neutral-400">
+        익절은 그대로 두고 손절 자리만 바꿨을 때. 재량으로 버틸수록 아래 줄로 내려간다.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs [&_td]:px-2 [&_th]:px-2">
+          <thead className="text-neutral-400">
+            <tr>
+              <th className="py-1 text-left">손절 자리</th>
+              <th className="py-1 text-right">손절가</th>
+              <th className="py-1 text-right">손실</th>
+              <th className="py-1 text-right">증거금 대비</th>
+              <th className="py-1 text-right">필요 승률</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const isCurrent = row.atrMultiple === atrStopMultiple;
+              return (
+                <tr
+                  key={row.label}
+                  className={`border-t border-neutral-900 ${
+                    isCurrent ? 'bg-neutral-900/60' : ''
+                  }`}
+                >
+                  <td className="py-1.5 text-neutral-200">
+                    {row.label}
+                    {isCurrent && (
+                      <span className="ml-1 text-[11px] text-neutral-400">(현재 설정)</span>
+                    )}
+                    {row.beyondLiquidation && row.atrMultiple !== null && (
+                      <span className="ml-1 text-[11px] text-[var(--color-warn)]">
+                        청산이 먼저
+                      </span>
+                    )}
+                  </td>
+                  <td className="text-right tabular-nums text-neutral-300">
+                    {formatPrice(row.stopPrice)}
+                  </td>
+                  <td className="text-right tabular-nums text-[var(--color-short)]">
+                    {formatSignedUsd(-row.loss)}
+                  </td>
+                  <td className="text-right tabular-nums text-neutral-300">
+                    {formatPct(row.lossPctOfMargin)}
+                  </td>
+                  <td
+                    className={`text-right font-semibold tabular-nums ${
+                      row.breakEvenWinRate > 0.6
+                        ? 'text-[var(--color-short)]'
+                        : 'text-[var(--color-long)]'
+                    }`}
+                  >
+                    {formatPct(row.breakEvenWinRate)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 function Row({
@@ -77,7 +186,14 @@ function SetupBanner({ setup }: { setup: Signal['setup'] }) {
  * 진입 불가 상태에서는 계획 대신 차단 사유를 크게 띄운다. "왜 진입하면
  * 안 되는지"가 이 화면의 핵심 가치다.
  */
-export function OrderTicket({ signal, plan, equity, costEstimated }: Props) {
+export function OrderTicket({
+  signal,
+  plan,
+  equity,
+  costEstimated,
+  costRatePerSide,
+  atrStopMultiple,
+}: Props) {
   // 진입이 차단된 계획은 수치를 보여주지 않는다. 청산이 손절보다 가까우면
   // 손절이 체결되지 않아 화면의 "손절 시 손실"이 실제와 다르기 때문이다 (ADR-008).
   if (plan !== null && !plan.tradable) {
@@ -196,6 +312,15 @@ export function OrderTicket({ signal, plan, equity, costEstimated }: Props) {
           />
         )}
       </div>
+
+      {signal.indicators !== null && (
+        <StopScenarioTable
+          plan={plan}
+          atr={signal.indicators.atr14}
+          costRatePerSide={costRatePerSide}
+          atrStopMultiple={atrStopMultiple}
+        />
+      )}
     </section>
   );
 }
