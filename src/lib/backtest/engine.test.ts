@@ -277,6 +277,40 @@ describe('지정가 진입 (ADR-015)', () => {
   });
 });
 
+describe('점수와 사이징 (ADR-025)', () => {
+  it('기본값에서는 점수와 무관하게 같은 등급으로 진입한다', () => {
+    // 백테스트도 실시간과 같은 판정을 쓴다 (ADR-001). 점수가 크기를 바꾸면
+    // 점수별 성적표가 "점수의 효과"와 "크기의 효과"를 섞어버린다.
+    const s = scenario([
+      bar(ENTRY, ENTRY + 0.3, ENTRY - 0.3, ENTRY),
+      bar(ENTRY, 132.5, ENTRY - 0.2, 132.0),
+    ]);
+    const r = runBacktest({
+      ...s,
+      params: testParams({
+        account: { ...TEST_ACCOUNT, leverage: 10 },
+        entry: DEFAULT_ENTRY_CONFIG,
+      }),
+    });
+    expect(r.trades.length).toBeGreaterThan(0);
+    for (const t of r.trades) {
+      expect(t.conviction).toBe(DEFAULT_ENTRY_CONFIG.uniformConviction);
+    }
+  });
+
+  it('점수별 성적표와 R의 분모를 트레이드마다 남긴다', () => {
+    const s = scenario([
+      bar(ENTRY, ENTRY + 0.3, ENTRY - 0.3, ENTRY),
+      bar(ENTRY, 132.5, ENTRY - 0.2, 132.0),
+    ]);
+    const r = runBacktest({ ...s, params: lowLeverage() });
+    const t = lastTrade(r);
+    expect(t.plannedRisk).toBeGreaterThan(0);
+    expect(Object.keys(r.byScore)).toContain(`${t.score}점`);
+    expect(r.byScore[`${t.score}점`]!.averageR).not.toBeNull();
+  });
+});
+
 describe('비용 반영 (ADR-007)', () => {
   it('수수료가 트레이드마다 부과된다', () => {
     const s = scenario([
@@ -288,12 +322,17 @@ describe('비용 반영 (ADR-007)', () => {
     expect(t.netPnl).toBeCloseTo(t.grossPnl - t.fees - t.funding, 6);
   });
 
+  // 펀딩비는 체결 비용이면서 동시에 시그널의 차단 조건이다 (ADR-025).
+  // 극단값(±0.03% 초과)을 넣으면 진입 자체가 막혀 트레이드가 0건이 되므로,
+  // 비용 계산을 보려면 게이트 안쪽 값을 써야 한다.
+  const FUNDING_IN_RANGE = 0.0002;
+
   it('8시간 경계를 넘겨 보유하면 펀딩이 부과된다', () => {
     const flat = bar(ENTRY, ENTRY + 0.3, ENTRY - 0.3, ENTRY);
     // 진입은 15:10 UTC. 16:00 경계를 넘기려면 10봉 이상 보유해야 한다.
     const s = scenario(new Array(20).fill(flat));
     const t = lastTrade(
-      runBacktest({ ...s, params: lowLeverage({ fundingRatePerInterval: 0.001 }) }),
+      runBacktest({ ...s, params: lowLeverage({ fundingRatePerInterval: FUNDING_IN_RANGE }) }),
     );
     expect(t.funding).not.toBe(0);
   });
@@ -304,7 +343,7 @@ describe('비용 반영 (ADR-007)', () => {
       bar(ENTRY, 132.5, ENTRY - 0.2, 132.0),
     ]);
     const t = lastTrade(
-      runBacktest({ ...s, params: lowLeverage({ fundingRatePerInterval: 0.001 }) }),
+      runBacktest({ ...s, params: lowLeverage({ fundingRatePerInterval: FUNDING_IN_RANGE }) }),
     );
     expect(t.funding).toBe(0);
   });
@@ -313,7 +352,7 @@ describe('비용 반영 (ADR-007)', () => {
     const flat = bar(ENTRY, ENTRY + 0.3, ENTRY - 0.3, ENTRY);
     const s = scenario(new Array(20).fill(flat));
     const t = lastTrade(
-      runBacktest({ ...s, params: lowLeverage({ fundingRatePerInterval: 0.001 }) }),
+      runBacktest({ ...s, params: lowLeverage({ fundingRatePerInterval: FUNDING_IN_RANGE }) }),
     );
     expect(t.direction).toBe('long');
     expect(t.funding).toBeGreaterThan(0);

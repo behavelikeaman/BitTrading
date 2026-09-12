@@ -132,6 +132,17 @@ export function formatRatio(value: number | null | undefined): string {
 }
 
 /**
+ * R 배수. 부호를 붙여 적는다 — 0.25와 -0.25는 정반대 결론이라 부호가 값보다 중요하다.
+ *
+ * 잴 수 없으면(계획 손실이 0인 트레이드뿐) null이 들어온다.
+ */
+export function formatR(value: number | null | undefined): string {
+  if (!guard(value)) return EMPTY;
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(2)}R`;
+}
+
+/**
  * 손익비 전용. null은 "손실이 없어 정의되지 않음"이므로 ∞로 그린다.
  *
  * 트레이드가 0건일 때도 null이지만, 그 경우 화면에 트레이드 목록 자체가

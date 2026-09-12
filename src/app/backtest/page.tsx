@@ -22,6 +22,7 @@ interface Params {
   riskPctMedium: number;
   atrStopMultiple: number;
   targetRMultiple: number;
+  scoreDrivesSizing: boolean;
   highConvictionScore: number;
   mediumConvictionScore: number;
   entryType: 'market' | 'limit';
@@ -45,6 +46,7 @@ const DEFAULTS: Params = {
   // 시그널 기본값을 그대로 쓴다. 여기에 숫자를 다시 적으면 백테스트와
   // 실시간이 다른 기준으로 판정하게 된다 (채점 항목이 10개로 늘어났을 때
   // 실제로 6/4가 남아 백테스트만 느슨해졌다).
+  scoreDrivesSizing: DEFAULT_ENTRY_CONFIG.scoreDrivesSizing,
   highConvictionScore: DEFAULT_ENTRY_CONFIG.highConvictionScore,
   mediumConvictionScore: DEFAULT_ENTRY_CONFIG.mediumConvictionScore,
   entryType: 'market',
@@ -91,6 +93,7 @@ function buildBody(
         targetRMultiple: p.targetRMultiple,
       },
       entry: {
+        scoreDrivesSizing: p.scoreDrivesSizing,
         highConvictionScore: p.highConvictionScore,
         mediumConvictionScore: p.mediumConvictionScore,
       },
@@ -128,10 +131,10 @@ function Field({
 }
 
 export default function BacktestPage() {
-  // 키에 v2를 붙인 이유: 채점 항목이 8개에서 10개로 바뀌어 점수 기준의
-  // 의미가 달라졌다 (ADR-022). 예전 키를 그대로 쓰면 브라우저에 남은 6/4가
-  // 새 기본값 7/5를 덮어써 백테스트만 조용히 느슨해진다.
-  const [params, setParams] = useLocalStorage('bt.backtest.v2', DEFAULTS);
+  // 키에 v3을 붙인 이유: 채점 항목이 10개에서 3개로 줄어 점수 기준의 의미가
+  // 또 달라졌다 (ADR-025). 예전 키를 그대로 쓰면 브라우저에 남은 7/5가 3점
+  // 만점 위에 얹혀, 어떤 신호도 확신 등급을 받지 못하는 백테스트가 된다.
+  const [params, setParams] = useLocalStorage('bt.backtest.v3', DEFAULTS);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [compare, setCompare] = useState<{
     title: string;
@@ -268,6 +271,23 @@ export default function BacktestPage() {
           <Field label="편도 슬리피지" value={params.slippageRatePerSide} step={0.0001} onChange={num('slippageRatePerSide')} />
           <Field label="리스크 (확신)" value={params.riskPctHigh} step={0.005} onChange={num('riskPctHigh')} />
           <Field label="리스크 (약간)" value={params.riskPctMedium} step={0.005} onChange={num('riskPctMedium')} />
+          {/* 점수로 크기를 바꾸는 것은 아직 근거가 없다 (ADR-025). 기본은 끔이고,
+              켠 백테스트와 비교해 볼 수 있게만 남겨둔다. */}
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-wide text-neutral-500">
+              점수 사이징
+            </span>
+            <select
+              value={params.scoreDrivesSizing ? 'on' : 'off'}
+              onChange={(e) =>
+                setParams({ ...params, scoreDrivesSizing: e.target.value === 'on' })
+              }
+              className="w-full rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-sm text-neutral-200"
+            >
+              <option value="off">끔 (전 거래 동일)</option>
+              <option value="on">켬 (점수별 리스크)</option>
+            </select>
+          </label>
           <Field
             label={`확신 점수 기준 (/${SCORE_ITEM_COUNT})`}
             value={params.highConvictionScore}

@@ -11,8 +11,22 @@ export type TradeMetrics = Omit<
   | 'bySetup'
   | 'byBandState'
   | 'byCrossCount'
+  | 'byScore'
   | 'haltedBars'
 >;
+
+/**
+ * 점수 묶음. 0~3점이 각각 한 칸이다.
+ *
+ * 구간이 4개뿐이라 구간당 30건, 총 120건이면 판정할 수 있다. 10항목 시절의
+ * 11개 구간은 330건 이상을 요구했고 항목 조합은 1,024가지였다 — 6개월
+ * 백테스트에서 나오는 수백 건으로는 애초에 측정이 불가능했다 (ADR-025).
+ */
+export type ScoreBucket = string;
+
+export function scoreBucket(score: number): ScoreBucket {
+  return `${score}점`;
+}
 
 /** 최근 교차 횟수 묶음. 3회 이상은 한 칸으로 합친다 — 그 아래는 표본이 흩어진다. */
 export type CrossBucket = '1회' | '2회' | '3회+';
@@ -42,6 +56,7 @@ export function computeMetrics(
       payoffRatio: null,
       requiredWinRate: null,
       expectancy: 0,
+      averageR: null,
       maxDrawdown: 0,
       maxConsecutiveLosses: 0,
       totalFees: 0,
@@ -60,6 +75,9 @@ export function computeMetrics(
   let liquidationCount = 0;
   let consecutive = 0;
   let maxConsecutiveLosses = 0;
+  /** R 합계와 잴 수 있었던 트레이드 수 */
+  let rSum = 0;
+  let rCount = 0;
 
   let equity = startingEquity;
   let peak = startingEquity;
@@ -75,6 +93,14 @@ export function computeMetrics(
       grossLoss += Math.abs(trade.netPnl);
       consecutive += 1;
       if (consecutive > maxConsecutiveLosses) maxConsecutiveLosses = consecutive;
+    }
+
+    // R = 순손익 / 진입 시점 계획 손실. 계획 손실이 0이면(수량이 0으로
+    // 반올림된 경우 등) 나눌 기준이 없으므로 분모에서 제외한다 — 0을
+    // 끼워 넣으면 평균이 조용히 0 쪽으로 끌린다.
+    if (trade.plannedRisk > 0) {
+      rSum += trade.netPnl / trade.plannedRisk;
+      rCount += 1;
     }
 
     totalFees += trade.fees;
@@ -117,6 +143,7 @@ export function computeMetrics(
     // 정확히 0이다 — 가정이 들어가지 않은 진짜 손익분기점이다.
     requiredWinRate: payoffRatio === null ? null : 1 / (1 + payoffRatio),
     expectancy: totalNet / trades.length,
+    averageR: rCount === 0 ? null : rSum / rCount,
     maxDrawdown,
     maxConsecutiveLosses,
     totalFees,
@@ -179,6 +206,20 @@ export function metricsByBandState(
   startingEquity: number,
 ): Partial<Record<BandState, TradeMetrics>> {
   return metricsByGroup(trades, startingEquity, (t) => t.bandState);
+}
+
+/**
+ * 점수별 성적 (ADR-025).
+ *
+ * **이 표 하나가 채점 체계의 존폐를 가른다.** 0→1→2→3점으로 평균 R이 단조
+ * 증가하면 그때 점수를 포지션 크기에 연결한다. 들쭉날쭉하면 점수 체계를
+ * 폐기하고 트리거 + 차단 조건만 남긴다. 그 전까지 점수는 기록일 뿐이다.
+ */
+export function metricsByScore(
+  trades: Trade[],
+  startingEquity: number,
+): Partial<Record<ScoreBucket, TradeMetrics>> {
+  return metricsByGroup(trades, startingEquity, (t) => scoreBucket(t.score));
 }
 
 /** 신호봉 기준 최근 교차 횟수별 성적. 클수록 휩소 구간의 교차다. */

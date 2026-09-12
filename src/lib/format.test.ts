@@ -8,6 +8,7 @@ import {
   formatQty,
   formatRate,
   formatProfitFactor,
+  formatR,
   formatRatio,
   formatSignedUsd,
   formatSignedPct,
@@ -132,5 +133,21 @@ describe('차트 축 눈금 포맷', () => {
     expect(formatDateShort(null)).toBe('—');
     expect(formatHourMinute(undefined)).toBe('—');
     expect(formatYear(Number.NaN)).toBe('—');
+  });
+});
+
+
+describe('formatR', () => {
+  it('부호를 붙이고 R 단위를 적는다', () => {
+    expect(formatR(0.25)).toBe('+0.25R');
+    expect(formatR(-1)).toBe('-1.00R');
+  });
+
+  it('0은 부호 없이 적는다', () => {
+    expect(formatR(0)).toBe('0.00R');
+  });
+
+  it('잴 수 없으면 빈 값이다', () => {
+    expect(formatR(null)).toBe('—');
   });
 });

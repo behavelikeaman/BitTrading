@@ -146,3 +146,22 @@ export function overextendedChaseLong(): number[] {
   }
   return closes;
 }
+
+/**
+ * 교차는 났는데 종가가 그 자리를 만들지 못한 시리즈 (밴드 돌파 셋업, 종가가 밴드 안).
+ *
+ * 고정 시드 난수 보행이다. 손으로 그린 매끈한 시리즈로는 이 상태가 재현되지
+ * 않았다 — 교차 시점에 종가가 거의 항상 밴드 밖이나 중앙선 반대편에 있었다.
+ * 시드를 바꾸면 다른 상황이 되므로 값을 고정한다.
+ */
+export function crossWithoutPosition(): number[] {
+  let s = 99;
+  const rnd = () => ((s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296);
+  const out: number[] = [];
+  let p = 100;
+  for (let i = 0; i < 200; i++) {
+    p += (rnd() - 0.5) * 1.2;
+    out.push(p);
+  }
+  return out;
+}

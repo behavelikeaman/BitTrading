@@ -32,10 +32,11 @@ function position(over: Partial<OpenPosition> = {}): OpenPosition {
   return {
     direction: 'long',
     conviction: 'high',
-    score: 8,
+    score: 3,
     setup: 'trend-pullback',
     bandState: 'expanded',
     crossCount: 1,
+    plannedRisk: 100,
     entryTime: T0,
     filled: [
       { index: 0, price: 100, qty: 1, notional: 100, margin: 10 },
@@ -221,8 +222,16 @@ describe('createPendingOrder', () => {
     return {
       direction: 'long',
       conviction: 'high',
-      score: 9,
+      score: 3,
       items: [],
+      trigger: {
+        passed: true,
+        cross: 'long',
+        positionConfirmed: true,
+        detail: '테스트 픽스처',
+        blocker: null,
+      },
+      gates: [],
       blockers: [],
       bandState: {
         state: 'squeeze-release',

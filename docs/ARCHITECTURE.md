@@ -24,7 +24,7 @@ src/
     indicators/
       sma.ts  ema.ts  bollinger.ts  atr.ts  adx.ts  volume.ts
     signal/
-      score.ts                  # 8개 항목 컨플루언스 스코어
+      score.ts                  # 차단 게이트 3 + 트리거 + 점수 3항목 (ADR-025)
       entry.ts                  # 스코어 + 무효필터 -> 진입 판정
     risk/
       sizing.ts                 # 리스크 예산 -> 수량·증거금
@@ -65,8 +65,8 @@ phases/                         # Harness step 정의
   -> GET /api/signal
        services/deepcoin.ts   : 5분봉 200개 + 15분봉 100개 + 펀딩
        lib/indicators/*       : EMA12 / SMA20 / BB / ATR / ADX / 거래량평균
-       lib/signal/score.ts    : 8개 항목 채점
-       lib/signal/entry.ts    : 무효필터 통과 여부 + 방향 + 확신도 등급
+       lib/signal/score.ts    : 게이트·트리거·점수 3항목 판정
+       lib/signal/entry.ts    : 차단 조건 통과 여부 + 방향 + 등급(기본 전 거래 동일)
        lib/risk/sizing.ts     : 등급 -> 리스크 예산 -> 명목가·수량·증거금
        lib/risk/ladder.ts     : 1차·2차 진입가와 수량, 공통 손절가
        lib/risk/liquidation.ts: 청산가, 평단, 본전가

@@ -14,10 +14,11 @@ function trade(netPnl: number): Trade {
     exitTime: 2,
     direction: 'long',
     conviction: 'high',
-    score: 8,
+    score: 3,
     setup: 'trend-pullback',
     bandState: 'expanded',
     crossCount: 1,
+    plannedRisk: 100,
     legs: [],
     averageEntryPrice: 100,
     exitPrice: 101,
@@ -31,7 +32,7 @@ function trade(netPnl: number): Trade {
 }
 
 const ENTRIES: JournalEntry[] = [
-  { type: 'signal', at: 1, signal: { direction: 'long', conviction: 'high', score: 8, price: 100 } },
+  { type: 'signal', at: 1, signal: { direction: 'long', conviction: 'high', score: 3, price: 100 } },
   { type: 'trade', at: 2, trade: trade(10) },
   { type: 'note', at: 3, note: '티커 재시작' },
 ];

@@ -21,11 +21,20 @@ export const TEST_ACCOUNT: AccountConfig = {
   costSource: 'measured',
 };
 
+/**
+ * 체결 경로 검증용 파라미터.
+ *
+ * 확신 등급을 'high'로 고정한다. 기본값은 'medium'(전 거래 동일 등급,
+ * ADR-025)이지만 등급마다 래더 레그 수가 달라 진입가·손절가가 통째로
+ * 바뀐다. 아래 시나리오의 가격들은 high 래더(2레그)로 손계산된 값이라,
+ * 등급을 떠다니게 두면 체결 경로 테스트가 시그널 기본값 변경마다 깨진다.
+ * 점수·등급 자체의 판정은 signal 쪽 테스트가 맡는다.
+ */
 export function testParams(over: Partial<BacktestParams> = {}): BacktestParams {
   return {
     ...DEFAULT_BACKTEST_PARAMS,
     account: TEST_ACCOUNT,
-    entry: DEFAULT_ENTRY_CONFIG,
+    entry: { ...DEFAULT_ENTRY_CONFIG, uniformConviction: 'high' },
     ...over,
   };
 }

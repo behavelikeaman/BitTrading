@@ -8,6 +8,7 @@ import {
   formatDateTime,
   formatPct,
   formatProfitFactor,
+  formatR,
   formatSignedUsd,
   formatPrice,
   formatUsd,
@@ -86,6 +87,7 @@ function Breakdown({
                 <th className="py-1 text-right">필요 승률</th>
                 <th className="py-1 text-right">손익비</th>
                 <th className="py-1 text-right">기대값/건</th>
+                <th className="py-1 text-right">평균 R</th>
                 <th className="py-1 text-right">최대 낙폭</th>
                 <th className="py-1 text-right">청산</th>
               </tr>
@@ -120,6 +122,15 @@ function Breakdown({
                     }`}
                   >
                     {formatSignedUsd(m.expectancy)}
+                  </td>
+                  <td
+                    className={`text-right tabular-nums ${
+                      m.averageR !== null && m.averageR >= 0
+                        ? 'text-[var(--color-long)]'
+                        : 'text-[var(--color-short)]'
+                    }`}
+                  >
+                    {formatR(m.averageR)}
                   </td>
                   <td className="text-right tabular-nums text-neutral-300">
                     {formatPct(m.maxDrawdown)}
@@ -166,6 +177,10 @@ export function BacktestReport({
   const bandRows = rowsOf(result.byBandState, (k) => BAND_STATE_LABEL[k as BandState] ?? k);
   // 교차 횟수는 '1회' < '2회' < '3회+' 순으로 읽는 게 자연스럽다.
   const crossRows = rowsOf(result.byCrossCount, (k) => k).sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  );
+  // 점수는 낮은 쪽부터 읽어야 단조 증가 여부가 눈에 들어온다.
+  const scoreRows = rowsOf(result.byScore, (k) => k).sort((a, b) =>
     a[0].localeCompare(b[0]),
   );
   const grossProfit = result.trades
@@ -285,6 +300,12 @@ export function BacktestReport({
           tone={result.expectancy >= 0 ? 'good' : 'bad'}
         />
         <Stat
+          label="평균 R / 트레이드"
+          value={formatR(result.averageR)}
+          hint="순손익 ÷ 진입 시점 계획 손실"
+          tone={result.averageR !== null && result.averageR >= 0 ? 'good' : 'bad'}
+        />
+        <Stat
           label="최대 낙폭 (MDD)"
           value={formatPct(result.maxDrawdown)}
           tone={result.maxDrawdown > 0.3 ? 'bad' : undefined}
@@ -320,6 +341,14 @@ export function BacktestReport({
           </p>
         </section>
       )}
+
+      {/* 점수별 성적 — 채점 체계가 작동하는지를 가르는 표다 (ADR-025) */}
+      <Breakdown
+        title="점수별 성적 — 점수가 결과를 예측하는가"
+        note="0 → 1 → 2 → 3점으로 평균 R이 단조 증가하면 그때 점수를 포지션 크기에 연결한다. 들쭉날쭉하면 점수 체계를 폐기하고 트리거 + 차단 조건만 남긴다. 구간이 4개뿐이라 구간당 30건(총 120건)이면 판정할 수 있다 — 지금은 점수가 크기를 바꾸지 않으므로 이 표가 순수하게 '자리의 질' 효과만 잰다."
+        firstColumn="점수"
+        rows={scoreRows}
+      />
 
       {/* 셋업별 성적 — 전체 평균은 서로 다른 자리를 섞어버린다 (ADR-022) */}
       <Breakdown

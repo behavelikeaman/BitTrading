@@ -59,17 +59,22 @@ export interface IndicatorSnapshot {
 /** 확신도 등급. 리스크 예산을 결정한다 (ADR-009). */
 export type Conviction = 'high' | 'medium' | 'none';
 
-export type ScoreKey =
-  | 'bbPosition'
-  | 'emaCross'
-  | 'stackAlignment'
-  | 'stackSpread'
-  | 'bandExpansion'
-  | 'volume'
-  | 'higherTimeframe'
-  | 'trendStrength'
-  | 'funding'
-  | 'session';
+/**
+ * 점수 항목 (2단계). 3개뿐이다 (ADR-025).
+ *
+ * "이 자리가 좋은가"를 세는 항목만 남겼다. "거래를 해도 되는 환경인가"는
+ * 통과/불통과일 뿐 점수가 아니므로 차단 조건(GateKey)으로 옮겼고, 필수
+ * 트리거는 없으면 어차피 진입이 없으므로 점수에서 뺐다.
+ */
+export type ScoreKey = 'stackAlignment' | 'stackSpread' | 'volume';
+
+/**
+ * 차단 게이트 (0단계). 점수가 아니라 통과/불통과다.
+ *
+ * 세션이 좋다고 나쁜 자리가 좋은 자리가 되지 않는다. 이것들에 점수를 주면
+ * 거의 항상 통과하는 항목이 모든 점수를 같이 밀어올려 확신 문턱을 왜곡한다.
+ */
+export type GateKey = 'bandWidth' | 'session' | 'funding';
 
 /** 컨플루언스 항목 하나. 실패해도 목록에서 빼지 않는다 — 왜 진입 못 하는지가 핵심 정보다. */
 export interface ScoreItem {
@@ -77,14 +82,50 @@ export interface ScoreItem {
   /** 화면 표시용 한국어 라벨 */
   label: string;
   passed: boolean;
-  /** 왜 통과/실패했는지 한 줄 (예: "ADX 24.1 >= 20") */
+  /** 왜 통과/실패했는지 한 줄 (예: "정배열 (20>55>95>135)") */
   detail: string;
+}
+
+/**
+ * 트리거 판정 (1단계).
+ *
+ * 교차와 가격 위치를 한 덩어리로 본다. 둘을 따로 점수로 세면 같은 사건을
+ * 두 번 세는 셈이라, 트리거가 완성됐다는 사실만으로 점수가 2점 올랐다.
+ */
+export interface TriggerState {
+  passed: boolean;
+  /** 트리거 자체의 방향. 셋업이 진입을 막아도 남는다. */
+  cross: Direction | null;
+  /** 셋업이 요구한 자리를 종가가 실제로 만들었는가 */
+  positionConfirmed: boolean;
+  /** 화면 표시용 한 줄 */
+  detail: string;
+  /** 통과하지 못한 이유. 그대로 blockers에 들어간다. 통과했으면 null */
+  blocker: string | null;
+}
+
+/** 차단 게이트 하나. 실패하면 그 문구가 그대로 blockers에 들어간다. */
+export interface GateItem {
+  key: GateKey;
+  /** 화면 표시용 한국어 라벨 */
+  label: string;
+  passed: boolean;
+  detail: string;
+  /** 실패 시 blockers에 실릴 문구 */
+  blocker: string;
 }
 
 export interface SignalContext {
   /** 오름차순. 미확정봉이 섞여 있어도 판정에서 제외된다 (ADR-006). */
   candles5m: Candle[];
-  /** 상위 프레임 정렬 판정용 */
+  /**
+   * 상위 프레임 캔들.
+   *
+   * **현재 어떤 판정 규칙도 이 값을 읽지 않는다.** 상위 프레임 정렬 항목은
+   * 삭제됐다 — SMMA135(5분봉)가 이미 22시간짜리 선이라 중복이었다 (ADR-025).
+   * 차트·레짐 해설과 괴리 검사 파이프라인이 같은 데이터를 쓰고 있어 경로는
+   * 그대로 뒀다. 파이프라인 자체를 걷어낼지는 따로 결정한다.
+   */
   candles15m: Candle[];
   /** 현재 펀딩비 (0.0001 = 0.01%) */
   fundingRate: number;
@@ -97,10 +138,25 @@ export interface SignalContext {
 export interface Signal {
   direction: Direction | null;
   conviction: Conviction;
-  /** 통과한 항목 수 (0~10) */
+  /**
+   * 통과한 점수 항목 수 (0~3).
+   *
+   * **아직 포지션 크기를 바꾸지 않는다.** 점수가 결과를 예측한다는 증거가
+   * 없으므로 당분간 기록만 하고, 점수별 평균 R이 단조 증가할 때 사이징에
+   * 연결한다 (ADR-025).
+   */
   score: number;
-  /** 10개 전부. 실패 항목도 이유와 함께 남긴다. */
+  /** 점수 항목 3개 전부. 실패 항목도 이유와 함께 남긴다. */
   items: ScoreItem[];
+  /**
+   * 1단계 트리거. 없으면 점수와 무관하게 진입이 없다.
+   *
+   * 교차와 가격 위치를 함께 본다 — "교차했고, 셋업 조건대로 종가가 실제로
+   * 그 자리를 만들었는가"가 트리거의 정의다 (ADR-025).
+   */
+  trigger: TriggerState;
+  /** 0단계 차단 게이트 판정 전체. 실패한 것은 blockers에도 들어간다. */
+  gates: GateItem[];
   /** 무효 필터에 걸린 사유. 비어 있어야 진입 가능. */
   blockers: string[];
   indicators: IndicatorSnapshot | null;
@@ -224,6 +280,14 @@ export interface Trade {
   bandState: BandState;
   /** 신호봉 기준 최근 12봉 안의 교차 횟수. 3회 이상이면 휩소 구간이다. */
   crossCount: number;
+  /**
+   * 진입 시점에 계획한 손실 (USDT, 체결비용 포함). R의 분모다.
+   *
+   * 이게 없으면 트레이드를 R로 환산할 수 없다. USDT 손익만으로는 자본이
+   * 복리로 변하는 구간끼리 비교가 안 되고, 점수별 평균 R도 낼 수 없다
+   * (ADR-025).
+   */
+  plannedRisk: number;
   /** 수수료·슬리피지·펀딩 차감 전 가격 손익 */
   grossPnl: number;
   fees: number;
@@ -242,6 +306,7 @@ export type TradeMetricsSummary = Omit<
   | 'bySetup'
   | 'byBandState'
   | 'byCrossCount'
+  | 'byScore'
   | 'haltedBars'
 >;
 
@@ -278,6 +343,14 @@ export interface BacktestResult {
   requiredWinRate: number | null;
   /** 트레이드당 평균 순손익 (USDT) */
   expectancy: number;
+  /**
+   * 트레이드당 평균 R (순손익 / 진입 시점 계획 손실).
+   *
+   * USDT 기대값은 자본이 복리로 변하면 구간끼리 비교가 안 되고, 리스크
+   * 예산이 다른 트레이드를 같은 저울에 올린다. R은 그 둘을 정규화한다.
+   * 계획 손실이 0인 트레이드뿐이면 null이다.
+   */
+  averageR: number | null;
   /** 자본 대비 최대 낙폭 비율 */
   maxDrawdown: number;
   maxConsecutiveLosses: number;
@@ -307,6 +380,15 @@ export interface BacktestResult {
   byBandState: Partial<Record<BandState, TradeMetricsSummary>>;
   /** 신호봉 기준 최근 교차 횟수별 성적. 클수록 휩소 구간의 교차다. */
   byCrossCount: Partial<Record<string, TradeMetricsSummary>>;
+  /**
+   * 점수(0~3)별 성적. **채점 체계가 작동하는지를 가르는 표다** (ADR-025).
+   *
+   * 점수가 올라갈수록 평균 R이 단조 증가하면 그때 사이징에 연결한다.
+   * 들쭉날쭉하면 점수 체계를 폐기하고 트리거 + 차단 조건만 남긴다.
+   * 구간이 4개뿐이라 구간당 30건, 총 120건이면 판정할 수 있다 — 10항목
+   * 시절의 11개 구간(330건 이상, 조합 1,024가지)은 애초에 측정이 불가능했다.
+   */
+  byScore: Partial<Record<string, TradeMetricsSummary>>;
   /**
    * 서킷브레이커(연속 손실·일일 손실 한도)로 진입 판정이 막힌 캔들 수.
    *

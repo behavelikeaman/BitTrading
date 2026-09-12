@@ -11,6 +11,7 @@
  *   npm run paper -- --reset --equity 5000 --interval 20
  */
 import { DEFAULT_ACCOUNT } from '../src/lib/risk/sizing';
+import { SCORE_ITEM_COUNT } from '../src/lib/signal/score';
 import { DEFAULT_ENTRY_CONFIG } from '../src/lib/signal/entry';
 import { DEFAULT_BACKTEST_PARAMS, toExecutionConfig } from '../src/lib/backtest/engine';
 import { createPendingOrder, stepExecution } from '../src/lib/execution/machine';
@@ -207,7 +208,7 @@ async function main(): Promise<void> {
             });
             log(
               `[${ts(candle.openTime)}] 신호 ${signal.direction === 'long' ? '롱' : '숏'} ` +
-                `${signal.conviction} ${signal.score}/8 @ ${candle.close.toFixed(1)}`,
+                `${signal.conviction} ${signal.score}/${SCORE_ITEM_COUNT} @ ${candle.close.toFixed(1)}`,
             );
           }
         }

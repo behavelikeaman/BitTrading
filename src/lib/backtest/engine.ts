@@ -17,6 +17,7 @@ import {
   computeMetrics,
   metricsByBandState,
   metricsByCrossCount,
+  metricsByScore,
   metricsBySetup,
 } from '@/lib/backtest/metrics';
 import {
@@ -229,6 +230,7 @@ export function runBacktest(input: {
     bySetup: metricsBySetup(trades, account.equity),
     byBandState: metricsByBandState(trades, account.equity),
     byCrossCount: metricsByCrossCount(trades, account.equity),
+    byScore: metricsByScore(trades, account.equity),
     haltedBars,
   };
 }

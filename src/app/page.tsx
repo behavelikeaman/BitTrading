@@ -236,7 +236,7 @@ export default function Home() {
             atrStopMultiple={settings.atrStopMultiple}
           />
           <RiskWarning warnings={data.plan?.warnings ?? []} />
-          <ScoreBreakdown items={data.signal.items} score={data.signal.score} />
+          <ScoreBreakdown signal={data.signal} />
           <SignalPanel
             indicators={data.signal.indicators}
             lastPrice={data.lastPrice}

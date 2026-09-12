@@ -53,6 +53,14 @@ export interface OpenPosition {
   pending: LadderLeg[];
   stopPrice: number;
   targetWidth: number;
+  /**
+   * 진입 시점에 계획한 손실 (USDT, 전량 체결 가정 + 체결비용 포함).
+   *
+   * 트레이드를 R로 환산하는 분모다. 체결가가 정해진 뒤 planPosition이 낸
+   * 값을 그대로 들고 간다 — 나중에 다시 계산하면 ATR·자본이 변해 있어
+   * 같은 트레이드가 다른 R을 갖게 된다 (ADR-025).
+   */
+  plannedRisk: number;
   fees: number;
   funding: number;
   equityAtEntry: number;

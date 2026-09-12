@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { scoreSignal, SCORE_ITEM_COUNT } from '@/lib/signal/score';
+import { scoreSignal, SCORE_ITEM_COUNT, GATE_COUNT } from '@/lib/signal/score';
 import {
   candlesFromCloses,
+  crossWithoutPosition,
+  overextendedChaseLong,
   overextendedReversionShort,
   risingHtf,
   trendPullbackLong,
 } from '@/lib/signal/fixtures';
 import type { SignalContext } from '@/types';
 
-/** UTC 12시 — 세션 필터를 통과하는 시각 */
+/** UTC 12시 — 세션 게이트를 통과하는 시각 */
 const NOON_UTC = Date.UTC(2026, 0, 5, 12, 0, 0);
 
 /** 신호봉에 거래량을 실어준다 (거래량 항목 통과용) */
@@ -39,6 +41,12 @@ function reversionCtx(over: Partial<SignalContext> = {}): SignalContext {
   };
 }
 
+const gate = (ctx: SignalContext, key: string, over = {}) =>
+  scoreSignal(ctx, over).gates.find((g) => g.key === key)!;
+
+const item = (ctx: SignalContext, key: string, over = {}) =>
+  scoreSignal(ctx, over).items.find((i) => i.key === key)!;
+
 describe('scoreSignal — 셋업 분류가 방향을 정한다', () => {
   it('정배열 눌림목 재교차는 롱이다 (2번 케이스)', () => {
     const result = scoreSignal(pullbackCtx());
@@ -61,175 +69,203 @@ describe('scoreSignal — 셋업 분류가 방향을 정한다', () => {
   });
 });
 
-describe('scoreSignal — 셋업마다 통과 조건이 다르다 (ADR-022)', () => {
-  it('과이격 되돌림은 상위 추세가 살아 있어야 상위 프레임 항목을 통과한다', () => {
-    // 숏인데 15분봉은 상승 중이다. 이전 규칙에서는 무조건 실패였지만,
-    // 되돌림은 상위 추세가 유지돼야 스택 하단에서 멈출 근거가 생긴다.
-    const item = scoreSignal(reversionCtx()).items.find(
-      (i) => i.key === 'higherTimeframe',
-    )!;
-    expect(item.passed).toBe(true);
-    expect(item.detail).toContain('되돌림의 전제');
+describe('scoreSignal — 1단계 트리거 (ADR-025)', () => {
+  it('교차 + 가격 위치가 모두 서면 통과한다', () => {
+    const trigger = scoreSignal(pullbackCtx()).trigger;
+    expect(trigger.passed).toBe(true);
+    expect(trigger.cross).toBe('long');
+    expect(trigger.positionConfirmed).toBe(true);
+    expect(trigger.blocker).toBeNull();
   });
 
-  it('과이격 되돌림인데 상위 추세까지 꺾였으면 실패한다', () => {
-    // 추세 전환이라면 스택 하단이 지지선이라는 전제가 사라진다.
-    const falling = Array.from({ length: 80 }, (_, i) => 100 - i * 0.5);
-    const item = scoreSignal(
-      reversionCtx({ candles15m: candlesFromCloses(falling) }),
-    ).items.find((i) => i.key === 'higherTimeframe')!;
-    expect(item.passed).toBe(false);
+  it('교차가 없으면 "진입 트리거 없음"을 사유로 남긴다', () => {
+    const c = pullbackCtx({ candles5m: candlesFromCloses(new Array(200).fill(100)) });
+    const trigger = scoreSignal(c).trigger;
+    expect(trigger.passed).toBe(false);
+    expect(trigger.cross).toBeNull();
+    expect(trigger.blocker).toBe('진입 트리거 없음');
   });
 
-  it('되돌림은 벌어진 이격이 통과 조건이다', () => {
-    const item = scoreSignal(reversionCtx()).items.find((i) => i.key === 'stackSpread')!;
-    expect(item.passed).toBe(true);
-    expect(item.detail).toContain('되돌림 근거');
+  it('과이격 추격은 교차가 있어도 트리거가 서지 않는다', () => {
+    const c = pullbackCtx({ candles5m: withVolumeSpike(overextendedChaseLong()) });
+    const trigger = scoreSignal(c).trigger;
+    expect(trigger.cross).not.toBeNull();
+    expect(trigger.passed).toBe(false);
+    expect(trigger.blocker).toBe('과이격 추격 자리');
   });
 
-  it('눌림목은 벌어지지 않은 이격이 통과 조건이다', () => {
-    const item = scoreSignal(pullbackCtx()).items.find((i) => i.key === 'stackSpread')!;
-    expect(item.passed).toBe(true);
+  it('가격 위치는 셋업마다 다른 자리를 본다 — 눌림목은 SMMA20 회복', () => {
+    expect(scoreSignal(pullbackCtx()).trigger.detail).toContain('SMMA20');
   });
 
-  it('가격 위치 항목은 되돌림에서 중앙선 반대 이탈을 본다', () => {
-    const item = scoreSignal(reversionCtx()).items.find((i) => i.key === 'bbPosition')!;
-    expect(item.detail).toContain('BB중앙선');
-    expect(item.detail).toContain('반대 이탈');
+  it('가격 위치는 셋업마다 다른 자리를 본다 — 되돌림은 중앙선 반대 이탈', () => {
+    const trigger = scoreSignal(reversionCtx()).trigger;
+    expect(trigger.detail).toContain('BB중앙선');
+    expect(trigger.detail).toContain('반대 이탈');
   });
 
-  it('가격 위치 항목은 눌림목에서 SMMA20 회복을 본다', () => {
-    const item = scoreSignal(pullbackCtx()).items.find((i) => i.key === 'bbPosition')!;
-    expect(item.detail).toContain('SMMA20');
+  it('종가가 자리를 만들지 못했으면 "가격 위치 미확인"이다', () => {
+    // 교차는 났지만 밴드 돌파 셋업의 종가가 밴드 안에 머문 경우.
+    const result = scoreSignal(
+      pullbackCtx({ candles5m: withVolumeSpike(crossWithoutPosition()) }),
+    );
+    expect(result.trigger.cross).not.toBeNull();
+    expect(result.trigger.positionConfirmed).toBe(false);
+    expect(result.trigger.blocker).toBe('가격 위치 미확인');
   });
 });
 
-describe('scoreSignal — 항목 구조', () => {
+describe('scoreSignal — 2단계 점수는 3항목뿐이다 (ADR-025)', () => {
   it(`항상 ${SCORE_ITEM_COUNT}개 항목을 반환하며 실패 항목도 남는다`, () => {
     const result = scoreSignal(pullbackCtx());
     expect(result.items).toHaveLength(SCORE_ITEM_COUNT);
-    for (const item of result.items) {
-      expect(item.detail.length).toBeGreaterThan(0);
-      expect(typeof item.passed).toBe('boolean');
+    for (const i of result.items) {
+      expect(i.detail.length).toBeGreaterThan(0);
+      expect(typeof i.passed).toBe('boolean');
     }
   });
 
-  it('키가 중복 없이 전부 나온다', () => {
+  it('점수 항목은 이평선 배열·이격·거래량 셋뿐이다', () => {
     const keys = scoreSignal(pullbackCtx()).items.map((i) => i.key);
-    expect(new Set(keys).size).toBe(SCORE_ITEM_COUNT);
-    expect(keys).toEqual(
-      expect.arrayContaining([
-        'emaCross',
-        'stackAlignment',
-        'stackSpread',
-        'bbPosition',
-        'bandExpansion',
-        'volume',
-        'higherTimeframe',
-        'trendStrength',
-        'funding',
-        'session',
-      ]),
-    );
+    expect(keys).toEqual(['stackAlignment', 'stackSpread', 'volume']);
   });
 
-  it('진입 셋업이 없으면 방향 의존 항목은 그 사유를 남긴다', () => {
-    const c = pullbackCtx({ candles5m: candlesFromCloses(new Array(200).fill(100)) });
-    const items = scoreSignal(c).items;
-    for (const key of ['bbPosition', 'higherTimeframe', 'funding'] as const) {
-      const item = items.find((i) => i.key === key)!;
-      expect(item.passed).toBe(false);
-      expect(item.detail).toContain('진입 셋업 없음');
+  it('트리거·차단 조건은 점수 항목에 들어 있지 않다', () => {
+    // 세션·펀딩·BB폭은 통과해도 점수를 올리면 안 된다. 거의 항상 통과하는
+    // 항목이 점수를 같이 밀어올리면 확신 문턱이 통째로 왜곡된다.
+    const keys: string[] = scoreSignal(pullbackCtx()).items.map((i) => i.key);
+    for (const dropped of [
+      'emaCross',
+      'bbPosition',
+      'bandExpansion',
+      'session',
+      'funding',
+      'trendStrength',
+      'higherTimeframe',
+    ]) {
+      expect(keys).not.toContain(dropped);
     }
+  });
+
+  it('세션 밖이어도 점수는 그대로다 — 세션은 점수가 아니다', () => {
+    const inSession = scoreSignal(pullbackCtx());
+    const outSession = scoreSignal(pullbackCtx({ nowMs: Date.UTC(2026, 0, 5, 3, 0, 0) }));
+    const passed = (r: typeof inSession) => r.items.filter((i) => i.passed).length;
+    expect(passed(outSession)).toBe(passed(inSession));
   });
 
   it('이평선 배열 항목은 혼조일 때만 실패한다', () => {
-    expect(
-      scoreSignal(pullbackCtx()).items.find((i) => i.key === 'stackAlignment')!.passed,
-    ).toBe(true);
+    expect(item(pullbackCtx(), 'stackAlignment').passed).toBe(true);
     const flat = pullbackCtx({ candles5m: candlesFromCloses(new Array(200).fill(100)) });
-    const item = scoreSignal(flat).items.find((i) => i.key === 'stackAlignment')!;
-    expect(item.passed).toBe(false);
-    expect(item.detail).toContain('혼조');
+    const alignment = item(flat, 'stackAlignment');
+    expect(alignment.passed).toBe(false);
+    expect(alignment.detail).toContain('혼조');
   });
-});
 
-describe('scoreSignal — 개별 항목', () => {
+  it('되돌림은 벌어진 이격이 통과 조건이다', () => {
+    const spread = item(reversionCtx(), 'stackSpread');
+    expect(spread.passed).toBe(true);
+    expect(spread.detail).toContain('되돌림 근거');
+  });
+
+  it('눌림목은 벌어지지 않은 이격이 통과 조건이다', () => {
+    expect(item(pullbackCtx(), 'stackSpread').passed).toBe(true);
+  });
+
   it('volume: 거래량이 기준 미만이면 실패한다', () => {
     const c = pullbackCtx({
       candles5m: candlesFromCloses(trendPullbackLong(), { volume: 1000, spread: 0.4 }),
     });
-    expect(scoreSignal(c).items.find((i) => i.key === 'volume')!.passed).toBe(false);
+    expect(item(c, 'volume').passed).toBe(false);
   });
 
   it('volume: 신호봉 거래량이 평균의 1.5배 이상이면 통과한다', () => {
-    expect(
-      scoreSignal(pullbackCtx()).items.find((i) => i.key === 'volume')!.passed,
-    ).toBe(true);
+    expect(item(pullbackCtx(), 'volume').passed).toBe(true);
   });
 
-  it('funding: 롱인데 펀딩이 한계 이상이면 실패한다', () => {
-    const item = scoreSignal(pullbackCtx({ fundingRate: 0.001 })).items.find(
-      (i) => i.key === 'funding',
-    )!;
-    expect(item.passed).toBe(false);
+  it('거래량은 가격에서 파생되지 않은 유일한 항목이라 남겨둔다', () => {
+    // 이 항목을 빼면 점수가 100% 가격의 함수가 된다. 문서가 아니라 코드로
+    // 고정해 두는 이유는, 셋 중 가장 빼고 싶어지는 항목이기 때문이다.
+    const keys = scoreSignal(pullbackCtx()).items.map((i) => i.key);
+    expect(keys).toContain('volume');
+  });
+});
+
+describe('scoreSignal — 0단계 차단 게이트', () => {
+  it(`게이트는 ${GATE_COUNT}개다 — BB 폭·세션·펀딩`, () => {
+    const keys = scoreSignal(pullbackCtx()).gates.map((g) => g.key);
+    expect(keys).toEqual(['bandWidth', 'session', 'funding']);
   });
 
-  it('funding: 롱이고 펀딩이 음수면 통과한다', () => {
-    const item = scoreSignal(pullbackCtx({ fundingRate: -0.0005 })).items.find(
-      (i) => i.key === 'funding',
-    )!;
-    expect(item.passed).toBe(true);
+  it('BB 폭: 왕복 마찰 대비 최소치를 못 넘으면 실패한다', () => {
+    // 목표가 마찰을 못 넘는 관 안이면 확신의 문제가 아니라 진입 불가다.
+    const g = gate(pullbackCtx(), 'bandWidth', { minBbWidthCostMultiple: 1000 });
+    expect(g.passed).toBe(false);
+    expect(g.blocker).toBe('BB 폭 부족 (수수료 타당성)');
   });
 
-  it('session: UTC 03시는 세션 밖이라 실패한다', () => {
-    const c = pullbackCtx({ nowMs: Date.UTC(2026, 0, 5, 3, 0, 0) });
-    expect(scoreSignal(c).items.find((i) => i.key === 'session')!.passed).toBe(false);
+  it('BB 폭: 기준을 낮추면 통과한다', () => {
+    expect(gate(pullbackCtx(), 'bandWidth', { minBbWidthCostMultiple: 0 }).passed).toBe(
+      true,
+    );
   });
 
-  it('session: 설명에 KST 시각을 함께 적는다', () => {
+  it('BB 폭: 설명에 최소 요구치와 왕복 마찰이 함께 보인다', () => {
+    const g = gate(pullbackCtx(), 'bandWidth');
+    expect(g.detail).toContain('최소');
+    expect(g.detail).toContain('왕복 마찰');
+  });
+
+  it('세션: UTC 03시는 세션 밖이라 차단된다', () => {
+    const g = gate(pullbackCtx({ nowMs: Date.UTC(2026, 0, 5, 3, 0, 0) }), 'session');
+    expect(g.passed).toBe(false);
+    expect(g.blocker).toBe('세션 밖');
+  });
+
+  it('세션: 설명에 KST 시각을 함께 적는다', () => {
     // 화면의 다른 시각이 전부 KST이므로 이 칸만 UTC면 잘못 읽는다.
     // 판정 기준(세션 창)은 UTC 그대로다.
-    const c = pullbackCtx({ nowMs: Date.UTC(2026, 0, 5, 10, 0, 0) });
-    const item = scoreSignal(c).items.find((i) => i.key === 'session')!;
-    expect(item.detail).toBe('KST 19시 (UTC 10시) vs UTC 7~21시');
+    const g = gate(pullbackCtx({ nowMs: Date.UTC(2026, 0, 5, 10, 0, 0) }), 'session');
+    expect(g.detail).toBe('KST 19시 (UTC 10시) vs UTC 7~21시');
   });
 
-  it('session: KST 환산이 자정을 넘어가도 맞다', () => {
-    const c = pullbackCtx({ nowMs: Date.UTC(2026, 0, 5, 16, 0, 0) });
-    const item = scoreSignal(c).items.find((i) => i.key === 'session')!;
-    expect(item.detail).toBe('KST 1시 (UTC 16시) vs UTC 7~21시');
+  it('세션: KST 환산이 자정을 넘어가도 맞다', () => {
+    const g = gate(pullbackCtx({ nowMs: Date.UTC(2026, 0, 5, 16, 0, 0) }), 'session');
+    expect(g.detail).toBe('KST 1시 (UTC 16시) vs UTC 7~21시');
   });
 
-  it('session: 임계값을 config로 덮어쓸 수 있다', () => {
-    const c = pullbackCtx({ nowMs: Date.UTC(2026, 0, 5, 3, 0, 0) });
-    const item = scoreSignal(c, {
+  it('세션: 임계값을 config로 덮어쓸 수 있다', () => {
+    const g = gate(pullbackCtx({ nowMs: Date.UTC(2026, 0, 5, 3, 0, 0) }), 'session', {
       sessionStartUtcHour: 0,
       sessionEndUtcHour: 24,
-    }).items.find((i) => i.key === 'session')!;
-    expect(item.passed).toBe(true);
+    });
+    expect(g.passed).toBe(true);
   });
 
-  it('higherTimeframe: 눌림목 롱은 15분봉이 상승 중이어야 통과한다', () => {
-    const item = scoreSignal(pullbackCtx()).items.find(
-      (i) => i.key === 'higherTimeframe',
-    )!;
-    expect(item.passed).toBe(true);
+  it('펀딩: 롱인데 펀딩이 한계 이상이면 차단된다', () => {
+    const g = gate(pullbackCtx({ fundingRate: 0.001 }), 'funding');
+    expect(g.passed).toBe(false);
+    expect(g.blocker).toBe('펀딩 극단값');
   });
 
-  it('higherTimeframe: 눌림목 롱인데 15분봉이 하락 중이면 실패한다', () => {
-    const falling = Array.from({ length: 80 }, (_, i) => 100 - i * 0.5);
-    const item = scoreSignal(
-      pullbackCtx({ candles15m: candlesFromCloses(falling) }),
-    ).items.find((i) => i.key === 'higherTimeframe')!;
-    expect(item.passed).toBe(false);
+  it('펀딩: 롱이고 펀딩이 음수면 통과한다', () => {
+    expect(gate(pullbackCtx({ fundingRate: -0.0005 }), 'funding').passed).toBe(true);
   });
 
-  it('trendStrength: adxMin을 config로 낮추면 통과한다', () => {
-    const item = scoreSignal(pullbackCtx(), { adxMin: 0 }).items.find(
-      (i) => i.key === 'trendStrength',
-    )!;
-    expect(item.passed).toBe(true);
+  it('펀딩: 평상시 값(0.01%)은 그냥 통과한다 — 그래서 점수가 아니다', () => {
+    // BTC 평상시 펀딩은 0.005~0.015%이고 한계는 ±0.03%다. 90% 이상이
+    // 통과하는 조건에 1점을 주면 모든 점수가 1씩 부풀어 문턱이 왜곡된다.
+    expect(gate(pullbackCtx({ fundingRate: 0.0001 }), 'funding').passed).toBe(true);
+  });
+
+  it('펀딩: 방향이 없으면 절대값으로 잰다', () => {
+    const flat = pullbackCtx({
+      candles5m: candlesFromCloses(new Array(200).fill(100)),
+      fundingRate: -0.001,
+    });
+    const g = gate(flat, 'funding');
+    expect(g.passed).toBe(false);
+    expect(g.detail).toContain('±');
   });
 });
 
@@ -269,6 +305,7 @@ describe('scoreSignal — 데이터 부족', () => {
     const c = pullbackCtx({ candles5m: candlesFromCloses([100, 101, 102]) });
     const result = scoreSignal(c);
     expect(result.items).toHaveLength(SCORE_ITEM_COUNT);
+    expect(result.gates).toHaveLength(GATE_COUNT);
     expect(result.indicators).toBeNull();
     expect(result.direction).toBeNull();
   });
@@ -276,6 +313,7 @@ describe('scoreSignal — 데이터 부족', () => {
   it('빈 배열에서도 예외를 던지지 않는다', () => {
     const result = scoreSignal(pullbackCtx({ candles5m: [], candles15m: [] }));
     expect(result.items).toHaveLength(SCORE_ITEM_COUNT);
+    expect(result.gates).toHaveLength(GATE_COUNT);
     expect(result.indicators).toBeNull();
   });
 });

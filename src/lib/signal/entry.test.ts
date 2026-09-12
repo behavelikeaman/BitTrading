@@ -41,26 +41,28 @@ const reversionCtx = (over: Partial<SignalContext> = {}) =>
 const flatCtx = (over: Partial<SignalContext> = {}) =>
   ctxOf(new Array(200).fill(100), over);
 
-describe('evaluateEntry — 실전 셋업 두 가지', () => {
-  it('눌림목 재진입(2번)은 9/10으로 확신 등급이다', () => {
-    const signal = evaluateEntry(pullbackCtx(), CLEAN_GUARD);
-    expect(signal.blockers).toEqual([]);
-    expect(signal.score).toBe(9);
-    expect(signal.direction).toBe('long');
-    expect(signal.conviction).toBe('high');
-    expect(signal.setup.kind).toBe('trend-pullback');
+/** 거래량이 실리지 않아 점수 한 칸이 빠지는 눌림목 */
+const lowVolumePullbackCtx = () =>
+  pullbackCtx({
+    candles5m: candlesFromCloses(trendPullbackLong(), { volume: 1000, spread: 0.4 }),
   });
 
-  it('과이격 되돌림(1번)은 정배열인데도 숏으로 확신 등급이 나온다', () => {
-    // 이 테스트가 이번 변경의 핵심이다. 예전 규칙에서는 상위 추세와
-    // 방향이 반대라 상위 프레임·가격 위치 항목이 구조적으로 실패해
-    // 확신 등급이 나올 수 없었다 (ADR-022).
+describe('evaluateEntry — 실전 셋업 두 가지', () => {
+  it('눌림목 재진입(2번)은 3/3으로 진입한다', () => {
+    const signal = evaluateEntry(pullbackCtx(), CLEAN_GUARD);
+    expect(signal.blockers).toEqual([]);
+    expect(signal.score).toBe(3);
+    expect(signal.direction).toBe('long');
+    expect(signal.setup.kind).toBe('trend-pullback');
+    expect(signal.trigger.passed).toBe(true);
+  });
+
+  it('과이격 되돌림(1번)은 정배열인데도 숏으로 진입한다', () => {
     const signal = evaluateEntry(reversionCtx(), CLEAN_GUARD);
     expect(signal.blockers).toEqual([]);
-    expect(signal.score).toBe(9);
+    expect(signal.score).toBe(3);
     expect(signal.direction).toBe('short');
     expect(signal.setup.alignment).toBe('bull');
-    expect(signal.conviction).toBe('high');
     expect(signal.setup.kind).toBe('overextended-reversion');
   });
 
@@ -79,29 +81,84 @@ describe('evaluateEntry — 실전 셋업 두 가지', () => {
   });
 });
 
-describe('evaluateEntry — 등급 임계값', () => {
-  it('임계값을 올리면 같은 점수라도 등급이 내려간다', () => {
-    const signal = evaluateEntry(pullbackCtx(), CLEAN_GUARD, {
-      highConvictionScore: 10,
-      mediumConvictionScore: 9,
-    });
-    expect(signal.score).toBe(9);
-    expect(signal.conviction).toBe('medium');
+describe('evaluateEntry — 점수는 사이징을 바꾸지 않는다 (ADR-025)', () => {
+  it('기본값에서 등급은 점수와 무관하게 전 거래 동일하다', () => {
+    const full = evaluateEntry(pullbackCtx(), CLEAN_GUARD);
+    const partial = evaluateEntry(lowVolumePullbackCtx(), CLEAN_GUARD);
+    expect(full.score).toBe(3);
+    expect(partial.score).toBe(2);
+    expect(partial.blockers).toEqual([]);
+    expect(partial.conviction).toBe(full.conviction);
+    expect(full.conviction).toBe('medium');
   });
 
-  it('점수가 medium 기준에 못 미치면 none이다', () => {
+  it('점수가 낮아도 진입한다 — 점수 구간별 성적을 재려면 전 구간을 밟아야 한다', () => {
+    // 낮은 점수를 아예 안 들어가면 점수별 평균 R 곡선에 그 구간이 비고,
+    // 점수가 결과를 예측하는지 영영 알 수 없다.
+    const signal = evaluateEntry(lowVolumePullbackCtx(), CLEAN_GUARD);
+    expect(signal.conviction).not.toBe('none');
+  });
+
+  it('uniformConviction으로 그 고정 등급을 바꿀 수 있다', () => {
     const signal = evaluateEntry(pullbackCtx(), CLEAN_GUARD, {
-      highConvictionScore: 99,
-      mediumConvictionScore: 99,
+      uniformConviction: 'high',
     });
+    expect(signal.conviction).toBe('high');
+  });
+
+  it('scoreDrivesSizing을 켜면 3점은 확신, 2점은 약간의 확신이다', () => {
+    const full = evaluateEntry(pullbackCtx(), CLEAN_GUARD, { scoreDrivesSizing: true });
+    const partial = evaluateEntry(lowVolumePullbackCtx(), CLEAN_GUARD, {
+      scoreDrivesSizing: true,
+    });
+    expect(full.conviction).toBe('high');
+    expect(partial.conviction).toBe('medium');
+  });
+
+  it('minScoreToEnter를 올리면 그 아래 점수는 진입하지 않는다', () => {
+    const signal = evaluateEntry(lowVolumePullbackCtx(), CLEAN_GUARD, {
+      minScoreToEnter: 3,
+    });
+    expect(signal.score).toBe(2);
     expect(signal.conviction).toBe('none');
   });
 });
 
-describe('evaluateEntry — 무효 필터', () => {
-  it('blackout이면 점수가 높아도 conviction은 none이다', () => {
+describe('evaluateEntry — 0단계 차단 조건', () => {
+  it('BB 폭이 수수료 타당성 기준에 못 미치면 차단된다', () => {
+    const signal = evaluateEntry(pullbackCtx(), CLEAN_GUARD, {
+      minBbWidthCostMultiple: 1000,
+    });
+    expect(signal.blockers).toContain('BB 폭 부족 (수수료 타당성)');
+    expect(signal.conviction).toBe('none');
+  });
+
+  it('세션 밖이면 점수와 무관하게 차단된다', () => {
+    const signal = evaluateEntry(
+      pullbackCtx({ nowMs: Date.UTC(2026, 0, 5, 3, 0, 0) }),
+      CLEAN_GUARD,
+    );
+    expect(signal.score).toBe(3);
+    expect(signal.blockers).toContain('세션 밖');
+    expect(signal.conviction).toBe('none');
+  });
+
+  it('펀딩이 극단값이면 차단된다', () => {
+    const signal = evaluateEntry(pullbackCtx({ fundingRate: 0.001 }), CLEAN_GUARD);
+    expect(signal.blockers).toContain('펀딩 극단값');
+    expect(signal.conviction).toBe('none');
+  });
+
+  it('평상시 펀딩(0.01%)은 아무 영향도 주지 않는다', () => {
+    const normal = evaluateEntry(pullbackCtx({ fundingRate: 0.0001 }), CLEAN_GUARD);
+    const zero = evaluateEntry(pullbackCtx(), CLEAN_GUARD);
+    expect(normal.blockers).toEqual([]);
+    expect(normal.score).toBe(zero.score);
+  });
+
+  it('blackout이면 점수가 만점이어도 conviction은 none이다', () => {
     const signal = evaluateEntry(pullbackCtx({ blackout: true }), CLEAN_GUARD);
-    expect(signal.score).toBe(9);
+    expect(signal.score).toBe(3);
     expect(signal.conviction).toBe('none');
     expect(signal.blockers).toContain('지표 발표 블랙아웃');
   });
@@ -130,31 +187,23 @@ describe('evaluateEntry — 무효 필터', () => {
       dailyPnlPct: -0.059,
     });
     expect(signal.blockers).toEqual([]);
-    expect(signal.conviction).toBe('high');
+    expect(signal.conviction).not.toBe('none');
   });
 
-  it('교차가 없으면 "진입 트리거 없음"으로 차단된다', () => {
-    const signal = evaluateEntry(flatCtx(), CLEAN_GUARD);
-    expect(signal.blockers).toContain('진입 트리거 없음');
-    expect(signal.conviction).toBe('none');
-    expect(signal.direction).toBeNull();
-  });
-
-  it('데이터가 부족하면 "데이터 부족"으로 차단되고 예외가 없다', () => {
+  it('데이터가 부족하면 "데이터 부족" 하나로만 차단된다', () => {
+    // 판정 불가를 여러 사유로 쪼개 적으면 무엇이 진짜 문제인지 흐려진다.
     const signal = evaluateEntry(
       flatCtx({ candles5m: candlesFromCloses([100, 101, 102]) }),
       CLEAN_GUARD,
     );
     expect(signal.blockers).toContain('데이터 부족');
+    expect(signal.blockers).not.toContain('BB 폭 부족 (수수료 타당성)');
     expect(signal.conviction).toBe('none');
     expect(signal.items).toHaveLength(SCORE_ITEM_COUNT);
   });
 
   it('횡보 뒤 급등하는 시리즈는 이상 변동성으로 차단된다', () => {
-    const signal = evaluateEntry(
-      ctxOf(flatThenJump(60, 100, 130)),
-      CLEAN_GUARD,
-    );
+    const signal = evaluateEntry(ctxOf(flatThenJump(60, 100, 130)), CLEAN_GUARD);
     expect(signal.blockers).toContain('이상 변동성');
     expect(signal.conviction).toBe('none');
   });
@@ -171,11 +220,34 @@ describe('evaluateEntry — 무효 필터', () => {
   });
 });
 
+describe('evaluateEntry — 1단계 트리거', () => {
+  it('교차가 없으면 "진입 트리거 없음"으로 차단된다', () => {
+    const signal = evaluateEntry(flatCtx(), CLEAN_GUARD);
+    expect(signal.blockers).toContain('진입 트리거 없음');
+    expect(signal.conviction).toBe('none');
+    expect(signal.direction).toBeNull();
+  });
+
+  it('트리거 판정을 신호에 그대로 실어 보낸다', () => {
+    const signal = evaluateEntry(pullbackCtx(), CLEAN_GUARD);
+    expect(signal.trigger.cross).toBe('long');
+    expect(signal.trigger.positionConfirmed).toBe(true);
+    expect(signal.trigger.blocker).toBeNull();
+  });
+});
+
 describe('evaluateEntry — 반환 구조', () => {
   it(`항상 ${SCORE_ITEM_COUNT}개 항목을 담고 score는 통과 개수와 일치한다`, () => {
     const signal = evaluateEntry(pullbackCtx(), CLEAN_GUARD);
     expect(signal.items).toHaveLength(SCORE_ITEM_COUNT);
     expect(signal.score).toBe(signal.items.filter((i) => i.passed).length);
+  });
+
+  it('게이트 판정은 차단되지 않았을 때도 전부 남는다', () => {
+    // 왜 통과했는지 보이지 않으면 화면이 "막히지 않았다"는 사실만 말한다.
+    const signal = evaluateEntry(pullbackCtx(), CLEAN_GUARD);
+    expect(signal.gates.map((g) => g.key)).toEqual(['bandWidth', 'session', 'funding']);
+    expect(signal.gates.every((g) => g.passed)).toBe(true);
   });
 
   it('blockers가 비어 있을 때만 conviction이 none이 아니다', () => {

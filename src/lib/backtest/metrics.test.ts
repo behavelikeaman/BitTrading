@@ -4,7 +4,9 @@ import {
   crossBucket,
   metricsByBandState,
   metricsByCrossCount,
+  metricsByScore,
   metricsBySetup,
+  scoreBucket,
 } from '@/lib/backtest/metrics';
 import type { Trade } from '@/types';
 
@@ -13,12 +15,13 @@ function trade(netPnl: number, over: Partial<Trade> = {}): Trade {
     entryTime: 0,
     exitTime: 1,
     direction: 'long',
-    conviction: 'high',
-    score: 8,
+    conviction: 'medium',
+    score: 3,
     setup: 'trend-pullback',
     bandState: 'expanded',
     crossCount: 1,
     legs: [],
+    plannedRisk: 100,
     averageEntryPrice: 100,
     exitPrice: 100,
     exitReason: netPnl >= 0 ? 'take-profit' : 'stop-loss',
@@ -288,5 +291,67 @@ describe('metricsByGroup — 임의 기준으로 쪼개 경험칙을 잰다', ()
     );
     expect(by['squeeze-release']!.finalEquity).toBe(5100);
     expect(by['expanded']!.finalEquity).toBe(5100);
+  });
+});
+
+
+describe('computeMetrics — 평균 R (ADR-025)', () => {
+  it('R은 순손익을 진입 시점 계획 손실로 나눈 값이다', () => {
+    // +100/-50, 계획 손실 100 -> R은 +1과 -0.5, 평균 0.25
+    const m = computeMetrics([trade(100), trade(-50)], 5000);
+    expect(m.averageR).toBeCloseTo(0.25, 10);
+  });
+
+  it('리스크 예산이 다른 트레이드를 같은 저울에 올린다', () => {
+    // USDT 기대값은 200과 100을 다르게 보지만, 둘 다 계획 손실의 1배를
+    // 벌었으므로 R은 같다. 점수별 비교는 이 정규화 없이는 성립하지 않는다.
+    const m = computeMetrics([trade(200, { plannedRisk: 200 }), trade(100)], 5000);
+    expect(m.averageR).toBeCloseTo(1, 10);
+    expect(m.expectancy).toBeCloseTo(150, 10);
+  });
+
+  it('계획 손실이 0인 트레이드는 R 계산에서 빠진다', () => {
+    const m = computeMetrics([trade(100), trade(-999, { plannedRisk: 0 })], 5000);
+    expect(m.averageR).toBeCloseTo(1, 10);
+  });
+
+  it('잴 수 있는 트레이드가 하나도 없으면 null이다', () => {
+    expect(computeMetrics([trade(50, { plannedRisk: 0 })], 5000).averageR).toBeNull();
+    expect(computeMetrics([], 5000).averageR).toBeNull();
+  });
+});
+
+describe('metricsByScore — 점수 구간별 성적', () => {
+  it('점수는 "N점" 한 칸씩 4구간으로 묶인다', () => {
+    expect(scoreBucket(0)).toBe('0점');
+    expect(scoreBucket(3)).toBe('3점');
+  });
+
+  it('점수별로 나눠 각각의 평균 R을 낸다', () => {
+    const trades = [
+      trade(-100, { score: 1 }),
+      trade(-100, { score: 1 }),
+      trade(100, { score: 3 }),
+      trade(200, { score: 3 }),
+    ];
+    const byScore = metricsByScore(trades, 5000);
+    expect(byScore['1점']!.totalTrades).toBe(2);
+    expect(byScore['1점']!.averageR).toBeCloseTo(-1, 10);
+    expect(byScore['3점']!.averageR).toBeCloseTo(1.5, 10);
+  });
+
+  it('트레이드가 없는 점수 칸은 키 자체가 없다', () => {
+    const byScore = metricsByScore([trade(10, { score: 2 })], 5000);
+    expect(Object.keys(byScore)).toEqual(['2점']);
+  });
+
+  it('각 구간은 같은 시작 자본에서 출발한다', () => {
+    // 순서에 따라 출발 자본이 달라지면 먼저 나온 구간이 유리해져 비교가
+    // 무의미해진다.
+    const byScore = metricsByScore(
+      [trade(1000, { score: 3 }), trade(-100, { score: 0 })],
+      5000,
+    );
+    expect(byScore['0점']!.finalEquity).toBeCloseTo(4900, 10);
   });
 });
