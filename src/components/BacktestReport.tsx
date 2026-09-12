@@ -158,7 +158,7 @@ export function BacktestReport({ result, breakEvenWinRate, startingEquity }: Pro
           트레이드 ({result.trades.length}건)
         </h2>
         <div className="max-h-96 overflow-auto">
-          <table className="w-full text-xs">
+          <table className="w-full text-xs [&_td]:px-2 [&_th]:px-2">
             <thead className="sticky top-0 bg-neutral-950 text-neutral-500">
               <tr>
                 <th className="py-1 text-left">진입</th>

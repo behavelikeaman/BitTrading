@@ -158,11 +158,16 @@ export function planPosition(input: PlanPositionInput): PositionPlan {
 
   const warnings: string[] = [];
 
+  // 청산이 손절보다 가까우면 손절은 영영 체결되지 않는다. 그 경우 실제 손실은
+  // riskBudget이 아니라 증거금 전액이므로 이 계획의 수치가 전부 의미를 잃는다.
+  // 경고만 띄우고 수량을 보여주면 사용자가 틀린 숫자를 보고 주문한다 (ADR-008).
   const stopDistanceFromAvg = Math.abs(averageEntryPrice - stopPrice);
   const liqDistanceFromAvg = Math.abs(averageEntryPrice - liqPrice);
-  if (averageEntryPrice > 0 && liqDistanceFromAvg <= stopDistanceFromAvg) {
+  const liquidationInsideStop =
+    averageEntryPrice > 0 && liqDistanceFromAvg <= stopDistanceFromAvg;
+  if (liquidationInsideStop) {
     warnings.push(
-      '청산가가 손절가보다 가깝다. 레버리지를 낮추거나 손절폭을 좁혀라.',
+      '청산가가 손절가보다 가깝다. 손절이 체결되기 전에 청산된다. 레버리지를 낮추거나 손절폭을 좁혀라.',
     );
   }
   if (totalMargin > account.equity) {
@@ -199,6 +204,7 @@ export function planPosition(input: PlanPositionInput): PositionPlan {
     rewardAtTarget,
     breakEvenWinRate,
     targetNetReturnOnMargin,
+    tradable: !liquidationInsideStop && totalMargin <= account.equity,
     warnings,
   };
 }

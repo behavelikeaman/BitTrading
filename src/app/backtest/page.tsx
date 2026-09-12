@@ -265,9 +265,9 @@ export default function BacktestPage() {
       {compare !== null && (
         <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
           <h2 className="mb-3 text-sm font-semibold text-neutral-300">
-            시장가 vs 지정가 (ADR-015)
+            시장가 vs 지정가
           </h2>
-          <table className="w-full text-sm">
+          <table className="w-full text-sm [&_td]:px-2 [&_th]:px-2">
             <thead className="text-neutral-500">
               <tr>
                 <th className="py-1 text-left text-xs">항목</th>

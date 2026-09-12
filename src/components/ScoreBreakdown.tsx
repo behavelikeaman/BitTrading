@@ -19,7 +19,7 @@ export function ScoreBreakdown({ items, score }: Props) {
         <h2 className="text-sm font-semibold text-neutral-300">컨플루언스 점수</h2>
         <span className="text-lg font-bold">{score}/8</span>
       </div>
-      <table className="w-full text-sm">
+      <table className="w-full text-sm [&_td]:px-2 [&_th]:px-2">
         <tbody>
           {items.map((item) => (
             <tr key={item.key} className="border-t border-neutral-900">

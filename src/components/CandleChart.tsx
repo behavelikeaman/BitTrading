@@ -104,6 +104,9 @@ export function CandleChart({ candles, snapshots, plan }: Props) {
     midRef.current?.setData(line((s) => s.sma20));
     lowerRef.current?.setData(line((s) => s.bbLower));
     emaRef.current?.setData(line((s) => s.ema12));
+
+    // 호출하지 않으면 캔들이 오른쪽 끝에만 몰리고 왼쪽이 비어 보인다.
+    chartRef.current?.timeScale().fitContent();
   }, [candles, snapshots]);
 
   useEffect(() => {

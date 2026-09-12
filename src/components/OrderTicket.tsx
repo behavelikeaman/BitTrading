@@ -54,6 +54,29 @@ function Row({
  * 안 되는지"가 이 화면의 핵심 가치다.
  */
 export function OrderTicket({ signal, plan, equity, costEstimated }: Props) {
+  // 진입이 차단된 계획은 수치를 보여주지 않는다. 청산이 손절보다 가까우면
+  // 손절이 체결되지 않아 화면의 "손절 시 손실"이 실제와 다르기 때문이다 (ADR-008).
+  if (plan !== null && !plan.tradable) {
+    return (
+      <section className="rounded-lg border border-[var(--color-short)]/60 bg-[var(--color-short)]/10 p-4">
+        <h2 className="mb-3 text-sm font-semibold text-[var(--color-short)]">
+          진입 차단 — 이 설정으로는 주문하면 안 된다
+        </h2>
+        <ul className="space-y-1">
+          {plan.warnings.map((w) => (
+            <li key={w} className="text-base text-[var(--color-short)]">
+              • {w}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 text-xs text-neutral-400">
+          손절이 체결되기 전에 청산되므로 계산된 손실·손익비가 실제와 다르다. 아래 설정에서
+          레버리지를 낮추거나 ATR 손절 배수를 줄여라.
+        </p>
+      </section>
+    );
+  }
+
   if (plan === null) {
     return (
       <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">

@@ -145,6 +145,14 @@ export interface PositionPlan {
   rewardAtTarget: number;
   /** 이 손익비의 손익분기 승률 */
   breakEvenWinRate: number;
+  /**
+   * 이 계획으로 진입해도 되는가.
+   *
+   * 청산가가 손절가보다 가까우면 손절이 영영 체결될 수 없고, 실제 손실은
+   * riskBudget이 아니라 증거금 전액이 된다. 그 상태의 수치를 주문 티켓에
+   * 띄우면 사용자가 틀린 숫자를 보고 주문한다. 그래서 차단한다 (ADR-008).
+   */
+  tradable: boolean;
   /** 현재 레버리지 기준 증거금 대비 순수익 환산값 (표시용, ADR-013) */
   targetNetReturnOnMargin: number;
   warnings: string[];

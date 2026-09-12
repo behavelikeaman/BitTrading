@@ -281,7 +281,7 @@ export default function PaperPage() {
                   </p>
                 ) : (
                   <div className="mt-3 max-h-64 overflow-auto">
-                    <table className="w-full text-xs">
+                    <table className="w-full text-xs [&_td]:px-2 [&_th]:px-2">
                       <thead className="sticky top-0 bg-neutral-950 text-neutral-500">
                         <tr>
                           <th className="py-1 text-left">종류</th>
@@ -368,7 +368,7 @@ export default function PaperPage() {
               </button>
             </div>
             <div className="max-h-96 overflow-auto">
-              <table className="w-full text-xs">
+              <table className="w-full text-xs [&_td]:px-2 [&_th]:px-2">
                 <thead className="sticky top-0 bg-neutral-950 text-neutral-500">
                   <tr>
                     <th className="py-1 text-left">시각</th>

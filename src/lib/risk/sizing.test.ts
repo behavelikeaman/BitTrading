@@ -256,3 +256,28 @@ describe('planPosition — 숏', () => {
     expect(p.riskBudget).toBeCloseTo(100, 0);
   });
 });
+
+describe('planPosition — 진입 차단 (ADR-008)', () => {
+  it('정상 설정은 tradable이다', () => {
+    expect(plan().tradable).toBe(true);
+  });
+
+  it('청산가가 손절가보다 가까우면 차단한다', () => {
+    // 손절이 청산보다 멀면 손절은 영영 체결되지 않는다
+    const p = plan({ leverage: 100, atrStopMultiple: 5 });
+    expect(p.tradable).toBe(false);
+    expect(p.warnings.some((w) => w.includes('청산되기'))).toBe(false);
+    expect(p.warnings.some((w) => w.includes('청산가가 손절가보다 가깝다'))).toBe(true);
+  });
+
+  it('증거금이 자본금을 초과해도 차단한다', () => {
+    expect(plan({ leverage: 1, riskPctHigh: 0.5 }).tradable).toBe(false);
+  });
+
+  it('차단 여부는 레버리지를 낮추면 해제된다', () => {
+    const blocked = plan({ leverage: 100, atrStopMultiple: 5 });
+    const ok = plan({ leverage: 5, atrStopMultiple: 5 });
+    expect(blocked.tradable).toBe(false);
+    expect(ok.tradable).toBe(true);
+  });
+});
