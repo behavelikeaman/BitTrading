@@ -27,7 +27,7 @@ BTC-USDT 무기한 선물 5분봉 단타를 위한 **의사결정 지원 시스�
 
 - [docs/PRD.md](docs/PRD.md) — 기능 정의, 컨플루언스 스코어 8항목, 무효 필터
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 디렉토리 구조, 데이터 흐름, 경계 규칙
-- [docs/ADR.md](docs/ADR.md) — 설계 결정 15건
+- [docs/ADR.md](docs/ADR.md) — 설계 결정 21건
 - [docs/DEEPCOIN-API.md](docs/DEEPCOIN-API.md) — 검증된 Deepcoin 엔드포인트·인증·응답 스펙
 
 ## 핵심 설계 원칙
@@ -39,13 +39,29 @@ BTC-USDT 무기한 선물 5분봉 단타를 위한 **의사결정 지원 시스�
 5. **포지션은 리스크 예산에서 역산한다** — 증거금 비율이 아니라 (ADR-009).
 6. **v1은 알림 전용.** 주문 실행 코드 없음, 읽기 전용 API 키만 (ADR-002).
 
+## Phase
+
+| Phase | 내용 | 상태 |
+|---|---|---|
+| `0-core` | 지표·시그널·리스크·백테스트 엔진 + 대시보드·백테스트 화면 | 완료 |
+| `1-paper` | 페이퍼 트레이딩 — 백테스트와의 정합성 검증 | 대기 |
+
+### Phase 1이 답하는 질문
+
+**"백테스트가 내린 판단을 실시간에서도 똑같이 내리는가?"** — 수익 여부가 아니다.
+
+승률 50%와 55%를 구분하려면 400트레이드가 필요하다. 하루 5건이어도 80거래일이다. 한 달(약 100건) 관측의 승률 표준오차는 ±5.0%p라, 관측 승률 55%의 신뢰구간이 45~65%로 손익분기를 넘었는지조차 구분되지 않는다.
+
+그래서 역할을 나눈다: **엣지는 백테스트가, 정합성은 페이퍼가** 담당한다 (ADR-020).
+
 ## 개발
 
 Harness 프레임워크로 step 단위 실행한다.
 
 ```bash
 python3 scripts/execute.py 0-core          # 순차 실행
-python3 scripts/execute.py 0-core --push   # 실행 후 push
+python3 scripts/execute.py 1-paper         # 페이퍼 트레이딩 Phase
+python3 scripts/execute.py 1-paper --push  # 실행 후 push
 ```
 
 ## 명령어
@@ -56,6 +72,8 @@ npm run build          # 프로덕션 빌드
 npm run lint           # ESLint
 npm run test           # vitest
 npm run fetch-history  # 과거 캔들 다운로드 (로컬 실행 전용)
+npm run paper          # 페이퍼 트레이딩 티커 (Phase 1)
+npm run divergence     # 페이퍼 vs 백테스트 괴리 검사 (Phase 1)
 ```
 
 > 백테스트용 과거 데이터 다운로드와 실시간 조회는 거래소 도메인 접근이 필요하다. 네트워크가 제한된 CI/클라우드 환경에서는 차단될 수 있으므로 **로컬에서 실행**한다.

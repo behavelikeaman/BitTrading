@@ -1,0 +1,36 @@
+{
+  "project": "BitTrading",
+  "phase": "1-paper",
+  "steps": [
+    {
+      "step": 0,
+      "name": "execution-machine",
+      "status": "pending"
+    },
+    {
+      "step": 1,
+      "name": "paper-store",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "paper-runner",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "name": "paper-api",
+      "status": "pending"
+    },
+    {
+      "step": 4,
+      "name": "paper-ui",
+      "status": "pending"
+    },
+    {
+      "step": 5,
+      "name": "divergence-check",
+      "status": "pending"
+    }
+  ]
+}
