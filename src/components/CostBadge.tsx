@@ -56,6 +56,13 @@ export function CostBadge({ params }: Props) {
           체결비용 추정 기준
         </span>
       )}
+      {/* 왜 실측이 안 되는지 — 이게 없으면 "(추정)"이 영원히 안 바뀌는 이유를
+          알 수 없다. 실측 수수료·슬리피지는 손익분기 승률을 수십 %p 움직인다. */}
+      {params.credential !== undefined && !params.credential.ok && (
+        <span className="basis-full text-neutral-400">
+          읽기 전용 키: {params.credential.message}
+        </span>
+      )}
     </div>
   );
 }

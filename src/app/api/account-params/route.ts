@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import {
+  checkCredentials,
   fetchFills,
   fetchRecentCandles,
   fetchStepMargin,
   fetchTradeFee,
 } from '@/services/deepcoin';
+import type { CredentialStatus } from '@/lib/credential-status';
 import { measureSlippage } from '@/lib/measure-slippage';
 
 export const runtime = 'nodejs';
@@ -20,6 +22,8 @@ export interface AccountParamsResponse {
   slippageRate: number;
   slippageSource: 'measured' | 'default';
   slippageSampleCount: number;
+  /** 읽기 전용 키 상태. 왜 실측이 안 되는지 화면이 설명할 수 있어야 한다. */
+  credential: CredentialStatus;
 }
 
 /**
@@ -30,11 +34,12 @@ export interface AccountParamsResponse {
  * 키 없는 사용자는 앱을 전혀 쓸 수 없게 된다.
  */
 export async function GET(): Promise<NextResponse<AccountParamsResponse>> {
-  const [fee, stepMargin, fills, candles] = await Promise.all([
+  const [fee, stepMargin, fills, candles, credential] = await Promise.all([
     fetchTradeFee().catch(() => null),
     fetchStepMargin().catch(() => null),
     fetchFills({ limit: 200 }).catch(() => null),
     fetchRecentCandles({ bar: '5m', limit: 300 }).catch(() => []),
+    checkCredentials(),
   ]);
 
   // 시장가 진입의 의도 가격은 체결이 속한 5분봉의 시가다.
@@ -54,5 +59,6 @@ export async function GET(): Promise<NextResponse<AccountParamsResponse>> {
     slippageRate: slippage?.medianRate ?? DEFAULT_SLIPPAGE,
     slippageSource: slippage === null ? 'default' : 'measured',
     slippageSampleCount: slippage?.sampleCount ?? 0,
+    credential,
   });
 }

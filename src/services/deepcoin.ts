@@ -1,4 +1,8 @@
 import crypto from 'node:crypto';
+import {
+  describeCredentials,
+  type CredentialStatus,
+} from '@/lib/credential-status';
 import type { Candle } from '@/types';
 import { parseDeepcoinCandles } from '@/lib/parse-deepcoin';
 import type { Fill } from '@/lib/measure-slippage';
@@ -50,8 +54,11 @@ function signedHeaders(
 ): Record<string, string> | null {
   const apiKey = process.env.DEEPCOIN_API_KEY;
   const secret = process.env.DEEPCOIN_API_SECRET;
-  const passphrase = process.env.DEEPCOIN_API_PASSPHRASE;
-  if (!apiKey || !secret || !passphrase) return null;
+  // 패스프레이즈가 없어도 호출은 시도한다. 발급 화면에 따라 패스프레이즈
+  // 입력란이 보이지 않는 경우가 있는데, 여기서 미리 포기하면 "왜 실측이
+  // 안 되는가"에 답할 수 없다. 거래소가 거부하면 그 응답으로 판정한다.
+  const passphrase = process.env.DEEPCOIN_API_PASSPHRASE ?? '';
+  if (!apiKey || !secret) return null;
 
   const timestamp = new Date().toISOString();
   const payload = `${timestamp}${method}/${requestPath}${body ?? ''}`;
@@ -203,4 +210,58 @@ export async function fetchFills(input: {
       qty: Number(row.fillSz),
     }))
     .filter((f) => Number.isFinite(f.ts) && Number.isFinite(f.fillPrice));
+}
+
+/**
+ * 읽기 전용 키가 실제로 동작하는지 한 번 호출해 확인한다.
+ *
+ * 판정 규칙은 src/lib/credential-status.ts의 순수 함수가 갖고, 여기서는
+ * 사실(환경변수 유무, HTTP 상태, 거래소 코드)만 모아 넘긴다.
+ */
+export async function checkCredentials(
+  instId = DEFAULT_INST_ID,
+): Promise<CredentialStatus> {
+  const hasApiKey = Boolean(process.env.DEEPCOIN_API_KEY);
+  const hasSecret = Boolean(process.env.DEEPCOIN_API_SECRET);
+  const hasPassphrase = Boolean(process.env.DEEPCOIN_API_PASSPHRASE);
+
+  const base = {
+    hasApiKey,
+    hasSecret,
+    hasPassphrase,
+    httpStatus: null as number | null,
+    exchangeCode: null as string | null,
+    exchangeMessage: null as string | null,
+    networkError: false,
+  };
+
+  if (!hasApiKey || !hasSecret) return describeCredentials(base);
+
+  const requestPath = buildPath('deepcoin/account/trade-fee', { instId });
+  const headers = signedHeaders('GET', requestPath);
+  if (headers === null) return describeCredentials(base);
+
+  try {
+    const response = await fetch(`${BASE_URL}/${requestPath}`, {
+      headers,
+      cache: 'no-store',
+    });
+    let code: string | null = null;
+    let msg: string | null = null;
+    try {
+      const envelope = (await response.json()) as DeepcoinEnvelope<unknown>;
+      code = envelope.code ?? null;
+      msg = envelope.msg ?? null;
+    } catch {
+      // 본문이 JSON이 아니면 상태 코드만으로 판정한다.
+    }
+    return describeCredentials({
+      ...base,
+      httpStatus: response.status,
+      exchangeCode: code,
+      exchangeMessage: msg,
+    });
+  } catch {
+    return describeCredentials({ ...base, networkError: true });
+  }
 }
