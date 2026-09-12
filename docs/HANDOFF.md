@@ -1,6 +1,6 @@
 # 인수인계 — 새 세션이 먼저 읽을 문서
 
-작성 시점 커밋: `c0deb0c` · 브랜치 `claude/confident-babbage-fyiotp` (아직 `main`에 병합하지 않음)
+최신 커밋: `af55b70` · **`main`에 병합 완료** (기본 브랜치에서 바로 받으면 된다)
 
 ---
 
@@ -53,28 +53,23 @@
 | `0-core` | 지표·시그널·리스크·백테스트 엔진 + 대시보드·백테스트 화면 | 완료 (step 0~8) |
 | `1-paper` | 체결 상태 기계 추출 + 페이퍼 트레이딩 + 괴리 검사 | 완료 (step 0~5) |
 
-- **테스트 254개 통과**, `typecheck`/`build`/`lint` 클린
-- 소스 76파일, 테스트 24파일
-
-### 화면
-- `/` 실시간 대시보드 (주문 티켓, 8항목 스코어, 지표, 차트)
-- `/backtest` 백테스트 (실제 승률 vs 손익분기 승률, 시장가 vs 지정가 비교)
-- `/paper` 페이퍼 트레이딩 (괴리 검사, 승률 신뢰구간)
+- **테스트 275개 통과**, `typecheck`/`build`/`lint` 클린
+- 화면 3개: `/` 대시보드, `/backtest` 백테스트, `/paper` 페이퍼
+- **타임프레임 5분봉·15분봉 선택 가능** (상위 프레임 자동: 5m→15m, 15m→1h)
 
 ### CLI
 ```
 npm run fetch-history -- --from YYYY-MM-DD --to YYYY-MM-DD [--timeframe 5m|15m]
-npm run paper        # 티커 (장기 실행). --timeframe 5m|15m
+npm run paper        # 페이퍼 티커 (장기 실행). --timeframe 5m|15m
 npm run divergence   # 괴리 검사 (불일치 시 종료 코드 1)
+npm run typecheck    # build는 테스트 파일을 타입체크하지 않는다
 ```
 
 ### 타임프레임
-5분봉·15분봉을 고를 수 있고 상위 프레임은 한 단계 위가 자동이다 (5m→15m, 15m→1h).
-정의는 `src/lib/timeframe.ts` 한 곳에 모여 있고, 거래소별 표기 차이(Deepcoin `1H`,
-Binance `1h`)와 과거 데이터 파일명(`src/lib/data-files.ts`)도 여기서 파생된다.
-체결 엔진은 `ExecutionConfig.barMs`로 봉 길이를 받으므로 5분 하드코딩이 없다.
-
----
+정의는 `src/lib/timeframe.ts` 한 곳에 모여 있고, 거래소별 표기 차이
+(Deepcoin `1H`, Binance `1h`)와 과거 데이터 파일명(`src/lib/data-files.ts`)이
+전부 여기서 파생된다. 체결 엔진은 `ExecutionConfig.barMs`로 봉 길이를 받으므로
+5분 하드코딩이 없다.
 
 ## 4. 설계의 핵심 (ADR 21건 중 반드시 지킬 것)
 
@@ -101,6 +96,15 @@ Binance `1h`)와 과거 데이터 파일명(`src/lib/data-files.ts`)도 여기�
    고쳤다. **개발 서버를 켜둔 채 `npm run build`를 같은 디렉토리에 돌리지 마라.**
 6. **step 정의의 모델 ID가 구세대였다** — `claude-sonnet-4-6` → `claude-opus-5`. LLM 관련 작업은 `claude-api` 스킬을 먼저 읽을 것.
 
+7. **청산가가 손절가보다 가까운데 주문 티켓이 그대로 노출됐다** — ADR-008은
+   "진입을 차단한다"인데 step 파일이 경고만 지시해 구현이 경고에 그쳤다.
+   그 상태에서는 손절이 체결되지 않아 화면의 손실 수치가 실제와 다르다.
+   `PositionPlan.tradable`을 추가해 차단한다.
+8. **차트가 `fitContent()` 미호출로 오른쪽에만 몰렸고**, 최신 마커가 오른쪽
+   끝에서 잘렸다. `rightOffset`으로 여백을 뒀다.
+9. **`Infinity`는 JSON에서 `null`이 된다** — `profitFactor`가 화면에 "—"로 떴다.
+   타입을 `number | null`로 바꾸고 JSON 왕복 테스트를 고정했다.
+
 ### 테스트 픽스처 주의
 합성 캔들은 `open`이 항상 이전 `close`라 **지정가가 100% 체결되고 손절·청산·물타기 경로를 밟지 않는다.** 각 경로 검증에는 `scenario()` 픽스처(진입 이후 캔들을 직접 지정)를 쓴다.
 
@@ -114,31 +118,29 @@ Binance `1h`)와 과거 데이터 파일명(`src/lib/data-files.ts`)도 여기�
 
 ---
 
-## 7. 사용자가 지금 해야 할 일 (마지막 안내 내용)
+## 7. 사용자가 지금 해야 할 일
 
 ```bash
-# 0. 받기
 git clone https://github.com/behavelikeaman/BitTrading.git
 cd BitTrading
-git checkout claude/confident-babbage-fyiotp   # 빼먹으면 빈 저장소
 npm install
-npm test                                        # 254 passed 확인
+npm test                                        # 275 passed 확인
 
-# 1. 과거 데이터
 npm run fetch-history -- --from 2025-01-01 --to 2025-06-30
-
-# 2. 백테스트  ← 여기서 답이 나온다
 npm run dev
-# localhost:3000/backtest → 날짜를 1단계와 동일하게 입력 → 실행
+# localhost:3000/backtest → 날짜를 위와 동일하게 입력 → 실행
 ```
 
-`/backtest` 최상단의 **실제 승률 vs 손익분기 승률**이 "이 매매법으로 돈을 벌 수 있는가"에 대한 직접적인 답이다.
+`/backtest` 최상단의 **실제 승률 vs 손익분기 승률**이
+"이 매매법으로 돈을 벌 수 있는가"에 대한 직접적인 답이다.
 
-**결과가 나쁘면 파라미터를 바꿔가며 재실행한다** (목표 R배수, 확신 점수 기준, ATR 손절 배수, 레버리지). 되는 조합을 못 찾으면 페이퍼 트레이딩으로 넘어가지 말 것 — 페이퍼는 안 되는 전략을 되게 만들지 않는다.
+**아직 실제 시장 데이터로 백테스트를 돌려본 적이 없다.** 이 환경은 거래소
+도메인이 차단돼 합성 데이터로 파이프라인만 검증했다. 사용자가 로컬에서
+돌린 결과를 가져오면 그때부터 파라미터 튜닝(목표 R배수, 확신 점수 기준,
+ATR 손절 배수, 레버리지)을 시작한다.
 
-3단계(페이퍼)와 4단계(괴리 검사)는 2단계를 통과한 뒤에만 의미가 있다.
-
----
+결과가 손익분기를 못 넘으면 페이퍼 트레이딩으로 넘어가지 말 것 —
+페이퍼는 안 되는 전략을 되게 만들지 않는다.
 
 ## 8. 아직 확정되지 않은 것
 
