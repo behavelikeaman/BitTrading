@@ -13,7 +13,10 @@
     {
       "step": 1,
       "name": "types-and-indicators",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-12T16:34:08+0900",
+      "completed_at": "2026-09-12T16:34:08+0900",
+      "summary": "공유 타입(src/types/index.ts: Candle{openTime,open,high,low,close,volume,closed}, Direction, IndicatorSnapshot{ema12,sma20,bbUpper,bbLower,bbWidth,atr14,adx14,volumeSma20})과 지표 순수 함수를 TDD로 작성. src/lib/indicators/: sma(values,period), ema(values,period)(SMA 시드 후 k=2/(p+1)), bollinger(closes,20,2)->{middle,upper,lower,width}(모집단 표준편차, width=(upper-lower)/middle), trueRange(candles)/atr(candles,14)(Wilder 평활, 첫 유효값 인덱스=period), adx(candles,14)->{plusDi,minusDi,adx}(Wilder, ADX는 DI보다 period만큼 늦게 확정: 첫 인덱스=2*period-1), volumeSma(candles,20), computeIndicators(candles)->(IndicatorSnapshot|null)[]. 규약: 모든 지표는 입력과 같은 길이를 반환하고 워밍업 구간은 null(0으로 채우지 않음). computeIndicators는 어느 한 지표라도 null이면 스냅샷 전체를 null로 낸다. src/lib/ 안에 fetch/process.env/Date.now 없음. 테스트 34개 통과, build/lint 통과."
     },
     {
       "step": 2,
