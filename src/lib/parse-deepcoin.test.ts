@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDeepcoinCandles } from '@/lib/parse-deepcoin';
+import { describeShape, parseDeepcoinCandles, parseTradeFee, toRows } from '@/lib/parse-deepcoin';
 
 const MS_5M = 300_000;
 
@@ -101,3 +101,82 @@ describe('parseDeepcoinCandles — 방어', () => {
     expect(out).toHaveLength(2);
   });
 });
+
+describe('parseTradeFee — 응답이 배열로 감싸여 와도 읽는다', () => {
+  it('객체로 오면 그대로 읽는다', () => {
+    expect(parseTradeFee({ maker: '0.0002', taker: '0.0004' })).toEqual({
+      maker: 0.0002,
+      taker: 0.0004,
+    });
+  });
+
+  it('배열로 감싸여 오면 첫 원소를 읽는다', () => {
+    // Deepcoin은 OKX 계열이라 data가 배열로 오는 엔드포인트가 있다.
+    // 방어하지 않으면 undefined -> NaN -> null이 되어 "실측 실패"로 조용히
+    // 넘어간다. 인증은 통과했는데 화면은 "(추정)"에 머무는 상태가 된다.
+    expect(parseTradeFee([{ maker: '0.0002', taker: '0.0004' }])).toEqual({
+      maker: 0.0002,
+      taker: 0.0004,
+    });
+  });
+
+  it('수수료가 음수로 와도 절대값으로 정규화한다', () => {
+    expect(parseTradeFee([{ maker: '-0.0002', taker: '-0.0005' }])).toEqual({
+      maker: 0.0002,
+      taker: 0.0005,
+    });
+  });
+
+  it('빈 배열·null·숫자 아님은 전부 null이다', () => {
+    expect(parseTradeFee([])).toBeNull();
+    expect(parseTradeFee(null)).toBeNull();
+    expect(parseTradeFee(undefined)).toBeNull();
+    expect(parseTradeFee({ maker: 'x', taker: '0.0004' })).toBeNull();
+    expect(parseTradeFee({ taker: '0.0004' })).toBeNull();
+  });
+});
+
+describe('toRows — 목록 응답의 배열을 꺼낸다', () => {
+  it('배열이면 그대로', () => {
+    expect(toRows([1, 2])).toEqual([1, 2]);
+  });
+
+  it('배열을 품은 객체면 그 배열을 꺼낸다', () => {
+    expect(toRows({ list: [1, 2] })).toEqual([1, 2]);
+    expect(toRows({ data: [3] })).toEqual([3]);
+    expect(toRows({ items: [4] })).toEqual([4]);
+  });
+
+  it('배열이 없으면 빈 배열이다', () => {
+    expect(toRows(null)).toEqual([]);
+    expect(toRows({})).toEqual([]);
+    expect(toRows(42)).toEqual([]);
+  });
+});
+
+describe('describeShape — 응답 모양만 짧게 적는다', () => {
+  it('값은 담지 않고 키 이름만 적는다', () => {
+    const s = describeShape({ level: 'Lv1', taker: '-0.0005', maker: '-0.0002' });
+    expect(s).toContain('level');
+    expect(s).toContain('taker');
+    expect(s).not.toContain('0.0005');
+    expect(s).not.toContain('Lv1');
+  });
+
+  it('배열이면 길이와 첫 원소의 키를 적는다', () => {
+    const s = describeShape([{ taker: '0.0004' }, { taker: '0.0004' }]);
+    expect(s).toContain('배열(2)');
+    expect(s).toContain('taker');
+  });
+
+  it('빈 배열·null도 구분해서 적는다', () => {
+    expect(describeShape([])).toBe('빈 배열');
+    expect(describeShape(null)).toBe('null');
+    expect(describeShape(undefined)).toBe('없음');
+  });
+
+  it('원시값은 타입만 적는다', () => {
+    expect(describeShape(42)).toBe('number');
+    expect(describeShape('abc')).toBe('string');
+  });
+})

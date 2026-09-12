@@ -63,6 +63,13 @@ export function CostBadge({ params }: Props) {
           읽기 전용 키: {params.credential.message}
         </span>
       )}
+      {/* 인증은 통과했는데 수수료만 못 읽은 경우. 응답 모양을 보면 필드명이
+          다른지, 배열로 감싸여 왔는지 바로 판단할 수 있다. */}
+      {params.credential?.ok === true && params.feeShape != null && (
+        <span className="basis-full text-neutral-400">
+          수수료 응답을 읽지 못했다 — {params.feeShape}
+        </span>
+      )}
     </div>
   );
 }

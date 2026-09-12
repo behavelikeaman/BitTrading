@@ -4,7 +4,7 @@ import {
   fetchFills,
   fetchRecentCandles,
   fetchStepMargin,
-  fetchTradeFee,
+  fetchTradeFeeDetailed,
 } from '@/services/deepcoin';
 import type { CredentialStatus } from '@/lib/credential-status';
 import { measureSlippage } from '@/lib/measure-slippage';
@@ -24,6 +24,11 @@ export interface AccountParamsResponse {
   slippageSampleCount: number;
   /** 읽기 전용 키 상태. 왜 실측이 안 되는지 화면이 설명할 수 있어야 한다. */
   credential: CredentialStatus;
+  /**
+   * 수수료 실측이 실패했을 때 응답이 어떻게 생겼는지 (키 이름만).
+   * 성공했으면 null이다.
+   */
+  feeShape: string | null;
 }
 
 /**
@@ -34,13 +39,15 @@ export interface AccountParamsResponse {
  * 키 없는 사용자는 앱을 전혀 쓸 수 없게 된다.
  */
 export async function GET(): Promise<NextResponse<AccountParamsResponse>> {
-  const [fee, stepMargin, fills, candles, credential] = await Promise.all([
-    fetchTradeFee().catch(() => null),
+  const [feeResult, stepMargin, fills, candles, credential] = await Promise.all([
+    fetchTradeFeeDetailed().catch(() => ({ fee: null, shape: '호출 실패' })),
     fetchStepMargin().catch(() => null),
     fetchFills({ limit: 200 }).catch(() => null),
     fetchRecentCandles({ bar: '5m', limit: 300 }).catch(() => []),
     checkCredentials(),
   ]);
+
+  const fee = feeResult.fee;
 
   // 시장가 진입의 의도 가격은 체결이 속한 5분봉의 시가다.
   const intendedPrices = candles.map((c) => ({ ts: c.openTime, price: c.open }));
@@ -60,5 +67,6 @@ export async function GET(): Promise<NextResponse<AccountParamsResponse>> {
     slippageSource: slippage === null ? 'default' : 'measured',
     slippageSampleCount: slippage?.sampleCount ?? 0,
     credential,
+    feeShape: fee === null ? feeResult.shape : null,
   });
 }

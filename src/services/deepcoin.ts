@@ -4,7 +4,12 @@ import {
   type CredentialStatus,
 } from '@/lib/credential-status';
 import type { Candle } from '@/types';
-import { parseDeepcoinCandles } from '@/lib/parse-deepcoin';
+import {
+  describeShape,
+  parseDeepcoinCandles,
+  parseTradeFee,
+  toRows,
+} from '@/lib/parse-deepcoin';
 import type { Fill } from '@/lib/measure-slippage';
 
 const BASE_URL = 'https://api.deepcoin.com';
@@ -185,16 +190,24 @@ const INST_TYPE = 'SWAP';
 export async function fetchTradeFee(
   instId = DEFAULT_INST_ID,
 ): Promise<{ maker: number; taker: number } | null> {
-  const data = await getPrivate<{ maker?: string; taker?: string }>(
-    'deepcoin/account/trade-fee',
-    { instType: INST_TYPE, instId },
-  );
-  if (data === null) return null;
-  // Deepcoin은 수수료를 음수로 주는 경우가 있어 절대값으로 정규화한다.
-  const maker = Math.abs(Number(data.maker));
-  const taker = Math.abs(Number(data.taker));
-  if (!Number.isFinite(maker) || !Number.isFinite(taker)) return null;
-  return { maker, taker };
+  return (await fetchTradeFeeDetailed(instId)).fee;
+}
+
+/**
+ * 수수료율과 **응답 모양**을 함께 돌려준다.
+ *
+ * 파싱이 실패했을 때 무엇이 왔는지 모르면 추측만 반복하게 된다. 실제로
+ * 응답이 배열로 감싸여 오는 바람에 인증은 통과했는데 화면은 "(추정)"에
+ * 머무는 일이 있었다. 값은 담지 않고 키 이름만 남긴다.
+ */
+export async function fetchTradeFeeDetailed(
+  instId = DEFAULT_INST_ID,
+): Promise<{ fee: { maker: number; taker: number } | null; shape: string }> {
+  const data = await getPrivate<unknown>('deepcoin/account/trade-fee', {
+    instType: INST_TYPE,
+    instId,
+  });
+  return { fee: parseTradeFee(data), shape: describeShape(data) };
 }
 
 /** 실제 체결 내역 (ADR-014). 슬리피지 실측용. */
@@ -202,22 +215,24 @@ export async function fetchFills(input: {
   instId?: string;
   limit?: number;
 } = {}): Promise<Fill[] | null> {
-  const data = await getPrivate<
-    { ts?: string; side?: string; fillPx?: string; fillSz?: string }[]
-  >('deepcoin/trade/fills', {
+  const data = await getPrivate<unknown>('deepcoin/trade/fills', {
     instType: INST_TYPE,
     instId: input.instId ?? DEFAULT_INST_ID,
     limit: String(input.limit ?? 100),
   });
   if (data === null) return null;
 
-  return (data ?? [])
-    .map((row) => ({
-      ts: Number(row.ts),
-      side: row.side === 'sell' ? ('sell' as const) : ('buy' as const),
-      fillPrice: Number(row.fillPx),
-      qty: Number(row.fillSz),
-    }))
+  // 목록도 배열로 올 수도, 배열을 품은 객체로 올 수도 있다.
+  return toRows(data)
+    .map((raw) => {
+      const row = raw as { ts?: string; side?: string; fillPx?: string; fillSz?: string };
+      return {
+        ts: Number(row.ts),
+        side: row.side === 'sell' ? ('sell' as const) : ('buy' as const),
+        fillPrice: Number(row.fillPx),
+        qty: Number(row.fillSz),
+      };
+    })
     .filter((f) => Number.isFinite(f.ts) && Number.isFinite(f.fillPrice));
 }
 

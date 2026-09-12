@@ -58,3 +58,56 @@ export function parseDeepcoinCandles(
 
   return [...byOpenTime.values()].sort((a, b) => a.openTime - b.openTime);
 }
+
+/** 목록 응답에서 배열을 꺼낸다. 배열 자체일 수도, 배열을 품은 객체일 수도 있다. */
+export function toRows(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'object' && raw !== null) {
+    for (const key of ['list', 'data', 'items']) {
+      const value = (raw as Record<string, unknown>)[key];
+      if (Array.isArray(value)) return value;
+    }
+  }
+  return [];
+}
+
+/**
+ * 수수료율 응답을 읽는다.
+ *
+ * Deepcoin은 OKX 계열이라 `data`가 배열로 오는 엔드포인트가 있다. 방어하지
+ * 않으면 undefined -> NaN -> null이 되어 "실측 실패"로 조용히 넘어가고,
+ * 인증은 통과했는데 화면은 "(추정)"에 머문다. 원인을 찾기 어려운 실패다.
+ *
+ * 수수료는 음수로 오는 경우가 있어 절대값으로 정규화한다.
+ */
+export function parseTradeFee(raw: unknown): { maker: number; taker: number } | null {
+  const entry = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof entry !== 'object' || entry === null) return null;
+
+  const row = entry as { maker?: unknown; taker?: unknown };
+  const maker = Math.abs(Number(row.maker));
+  const taker = Math.abs(Number(row.taker));
+  if (!Number.isFinite(maker) || !Number.isFinite(taker)) return null;
+  if (row.maker === undefined || row.taker === undefined) return null;
+  return { maker, taker };
+}
+
+/**
+ * 응답의 **모양만** 한 줄로 적는다. 값은 절대 담지 않는다.
+ *
+ * 파싱이 실패했을 때 "무엇이 왔길래 실패했나"를 알 수 없으면 추측만 반복하게
+ * 된다. 키 이름만 보면 필드명이 다른지, 배열로 감싸여 왔는지 바로 안다.
+ */
+export function describeShape(raw: unknown): string {
+  if (raw === undefined) return '없음';
+  if (raw === null) return 'null';
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return '빈 배열';
+    return `배열(${raw.length}) 첫 원소 ${describeShape(raw[0])}`;
+  }
+  if (typeof raw === 'object') {
+    const keys = Object.keys(raw as Record<string, unknown>);
+    return keys.length === 0 ? '빈 객체' : `객체 키: ${keys.join(',')}`;
+  }
+  return typeof raw;
+}
