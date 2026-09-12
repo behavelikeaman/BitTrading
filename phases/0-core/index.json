@@ -1,0 +1,15 @@
+{
+  "project": "BitTrading",
+  "phase": "0-core",
+  "steps": [
+    { "step": 0, "name": "project-setup", "status": "pending" },
+    { "step": 1, "name": "types-and-indicators", "status": "pending" },
+    { "step": 2, "name": "signal-scoring", "status": "pending" },
+    { "step": 3, "name": "risk-engine", "status": "pending" },
+    { "step": 4, "name": "backtest-engine", "status": "pending" },
+    { "step": 5, "name": "market-data", "status": "pending" },
+    { "step": 6, "name": "api-routes", "status": "pending" },
+    { "step": 7, "name": "dashboard-ui", "status": "pending" },
+    { "step": 8, "name": "backtest-ui", "status": "pending" }
+  ]
+}
