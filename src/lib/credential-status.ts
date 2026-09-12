@@ -16,8 +16,13 @@ export type CredentialReason =
   | 'rejected'
   | 'exchange-error';
 
+/**
+ * 딥코인은 **키를 만드는 시점에만** 패스프레이즈를 받는다. 기존 키에 나중에
+ * 추가할 수 없고 복구도 되지 않으므로, 없으면 키를 새로 만드는 것이 유일한
+ * 해결책이다. (거래소 응답으로 확인: code 50104)
+ */
 const MISSING_PASSPHRASE_HINT =
-  '패스프레이즈는 발급되는 값이 아니라 키를 만들 때 직접 정한 비밀번호다. 입력란이 없었다면 이 계정에는 없는 것이고, 있었다면 .env.local에 넣어라.';
+  '패스프레이즈는 키를 만들 때 직접 정하는 비밀번호이며, 기존 키에는 나중에 추가할 수 없다. API Management에서 키를 새로 만들면서 패스프레이즈를 지정하고 .env.local에 넣어라.';
 
 export interface CredentialStatusInput {
   hasApiKey: boolean;

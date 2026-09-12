@@ -46,6 +46,22 @@ describe('describeCredentials — 왜 실측이 안 되는지 알려준다', () 
     expect(s.message).toContain('401');
   });
 
+  it('거래소가 패스프레이즈를 요구하면 키를 새로 만들라고 안내한다', () => {
+    // 딥코인은 키 생성 시점에만 패스프레이즈를 받는다. 기존 키에 나중에
+    // 추가할 수 없으므로 "넣어라"가 아니라 "다시 만들어라"가 맞다.
+    const s = describeCredentials(
+      facts({
+        hasPassphrase: false,
+        httpStatus: 400,
+        exchangeCode: '50104',
+        exchangeMessage: "Request header 'DC-ACCESS-PASSPHRASE' can't be empty.",
+      }),
+    );
+    expect(s.reason).toBe('missing-passphrase');
+    expect(s.message).toContain('새로 만들');
+    expect(s.message).toContain('50104');
+  });
+
   it('패스프레이즈가 있는데 거부당하면 다른 원인을 가리킨다', () => {
     const s = describeCredentials(facts({ httpStatus: 401, exchangeCode: null }));
     expect(s.reason).toBe('rejected');
@@ -57,7 +73,7 @@ describe('describeCredentials — 왜 실측이 안 되는지 알려준다', () 
     const s = describeCredentials(facts({ hasPassphrase: false, httpStatus: null }));
     expect(s.ok).toBe(false);
     expect(s.reason).toBe('missing-passphrase');
-    expect(s.message).toContain('직접 정한');
+    expect(s.message).toContain('비밀번호');
   });
 
   it('시크릿만 비면 불완전으로 본다', () => {
