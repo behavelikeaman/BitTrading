@@ -1,11 +1,27 @@
 import type { BacktestResult, Trade } from '@/types';
 import type { SetupKind } from '@/lib/signal/setup';
+import type { BandState } from '@/lib/signal/band-state';
 
 /** 신호 수·체결률은 엔진만 알 수 있으므로 여기서는 트레이드에서 나오는 지표만 낸다. */
 export type TradeMetrics = Omit<
   BacktestResult,
-  'trades' | 'signalCount' | 'fillRate' | 'bySetup' | 'haltedBars'
+  | 'trades'
+  | 'signalCount'
+  | 'fillRate'
+  | 'bySetup'
+  | 'byBandState'
+  | 'byCrossCount'
+  | 'haltedBars'
 >;
+
+/** 최근 교차 횟수 묶음. 3회 이상은 한 칸으로 합친다 — 그 아래는 표본이 흩어진다. */
+export type CrossBucket = '1회' | '2회' | '3회+';
+
+export function crossBucket(count: number): CrossBucket {
+  if (count <= 1) return '1회';
+  if (count === 2) return '2회';
+  return '3회+';
+}
 
 /**
  * 트레이드 목록에서 성과 지표를 계산한다.
@@ -112,30 +128,63 @@ export function computeMetrics(
 }
 
 /**
- * 셋업별로 성과를 따로 낸다.
+ * 트레이드를 임의의 키로 묶어 각각의 지표를 낸다.
  *
  * 전체 평균은 서로 다른 자리를 섞어버린다. 눌림목 재진입과 과이격 되돌림은
  * 방향도 목표도 다른 매매라, 하나가 다른 하나의 성적을 가릴 수 있다.
  * 사용자의 경험칙("이 두 자리가 잘 먹힌다")을 검증하려면 자리별로 승률과
- * 기대값을 봐야 한다 (ADR-022).
+ * 기대값을 봐야 한다 (ADR-022). 밴드 폭 상태·교차 노이즈도 같은 이유로
+ * 같은 방식으로 쪼갠다.
  *
- * 각 셋업은 같은 시작 자본에서 출발한다. 순서에 따라 출발 자본이 달라지면
- * 먼저 나온 셋업이 유리해져 비교가 무의미해진다.
+ * 각 묶음은 같은 시작 자본에서 출발한다. 순서에 따라 출발 자본이 달라지면
+ * 먼저 나온 묶음이 유리해져 비교가 무의미해진다.
  */
+export function metricsByGroup<K extends string>(
+  trades: Trade[],
+  startingEquity: number,
+  keyOf: (trade: Trade) => K,
+): Partial<Record<K, TradeMetrics>> {
+  const grouped = new Map<K, Trade[]>();
+  for (const trade of trades) {
+    const key = keyOf(trade);
+    const list = grouped.get(key);
+    if (list === undefined) grouped.set(key, [trade]);
+    else list.push(trade);
+  }
+
+  const out: Partial<Record<K, TradeMetrics>> = {};
+  for (const [key, list] of grouped) {
+    out[key] = computeMetrics(list, startingEquity);
+  }
+  return out;
+}
+
+/** 셋업별 성적 (ADR-022) */
 export function metricsBySetup(
   trades: Trade[],
   startingEquity: number,
 ): Partial<Record<SetupKind, TradeMetrics>> {
-  const grouped = new Map<SetupKind, Trade[]>();
-  for (const trade of trades) {
-    const list = grouped.get(trade.setup);
-    if (list === undefined) grouped.set(trade.setup, [trade]);
-    else list.push(trade);
-  }
+  return metricsByGroup(trades, startingEquity, (t) => t.setup);
+}
 
-  const out: Partial<Record<SetupKind, TradeMetrics>> = {};
-  for (const [setup, list] of grouped) {
-    out[setup] = computeMetrics(list, startingEquity);
-  }
-  return out;
+/**
+ * 밴드 폭 상태별 성적.
+ *
+ * 사용자의 관찰: 밴드가 좁은 관을 만든 뒤 재확장할 때 올라탄 교차가 수익이었고,
+ * 관 안에서 골든·데드를 반복한 교차는 노이즈였다. 그 경험칙이 데이터에 있는지
+ * 여기서 잰다. 필터를 먼저 걸면 표본이 무너져 우연과 구분되지 않는다.
+ */
+export function metricsByBandState(
+  trades: Trade[],
+  startingEquity: number,
+): Partial<Record<BandState, TradeMetrics>> {
+  return metricsByGroup(trades, startingEquity, (t) => t.bandState);
+}
+
+/** 신호봉 기준 최근 교차 횟수별 성적. 클수록 휩소 구간의 교차다. */
+export function metricsByCrossCount(
+  trades: Trade[],
+  startingEquity: number,
+): Partial<Record<CrossBucket, TradeMetrics>> {
+  return metricsByGroup(trades, startingEquity, (t) => crossBucket(t.crossCount));
 }

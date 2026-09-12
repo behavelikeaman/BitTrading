@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { computeMetrics, metricsBySetup } from '@/lib/backtest/metrics';
+import {
+  computeMetrics,
+  crossBucket,
+  metricsByBandState,
+  metricsByCrossCount,
+  metricsBySetup,
+} from '@/lib/backtest/metrics';
 import type { Trade } from '@/types';
 
 function trade(netPnl: number, over: Partial<Trade> = {}): Trade {
@@ -10,6 +16,8 @@ function trade(netPnl: number, over: Partial<Trade> = {}): Trade {
     conviction: 'high',
     score: 8,
     setup: 'trend-pullback',
+    bandState: 'expanded',
+    crossCount: 1,
     legs: [],
     averageEntryPrice: 100,
     exitPrice: 100,
@@ -231,5 +239,54 @@ describe('computeMetrics — 실측 손익비와 필요 승률', () => {
     const roundTripped = JSON.parse(JSON.stringify(m)) as typeof m;
     expect(roundTripped.payoffRatio).toBe(m.payoffRatio);
     expect(roundTripped.requiredWinRate).toBe(m.requiredWinRate);
+  });
+});
+
+describe('metricsByGroup — 임의 기준으로 쪼개 경험칙을 잰다', () => {
+  function t(over: Partial<Trade>): Trade {
+    return { ...trade(over.netPnl ?? 0), ...over };
+  }
+
+  it('밴드 폭 상태별로 나눈다', () => {
+    const trades = [
+      t({ netPnl: 100, bandState: 'squeeze-release' }),
+      t({ netPnl: 50, bandState: 'squeeze-release' }),
+      t({ netPnl: -80, bandState: 'squeezed' }),
+    ];
+    const by = metricsByBandState(trades, 5000);
+    expect(by['squeeze-release']!.totalTrades).toBe(2);
+    expect(by['squeeze-release']!.winRate).toBe(1);
+    expect(by['squeezed']!.winRate).toBe(0);
+  });
+
+  it('교차 횟수는 3회 이상을 한 칸으로 묶는다', () => {
+    // 3·4·5회를 따로 두면 표본이 흩어져 어느 칸도 판정이 안 된다.
+    expect(crossBucket(1)).toBe('1회');
+    expect(crossBucket(2)).toBe('2회');
+    expect(crossBucket(3)).toBe('3회+');
+    expect(crossBucket(7)).toBe('3회+');
+  });
+
+  it('교차 횟수별로 나눈다', () => {
+    const trades = [
+      t({ netPnl: 100, crossCount: 1 }),
+      t({ netPnl: -40, crossCount: 4 }),
+      t({ netPnl: -40, crossCount: 9 }),
+    ];
+    const by = metricsByCrossCount(trades, 5000);
+    expect(by['1회']!.totalTrades).toBe(1);
+    expect(by['3회+']!.totalTrades).toBe(2);
+  });
+
+  it('각 묶음은 같은 시작 자본에서 출발한다', () => {
+    const by = metricsByBandState(
+      [
+        t({ netPnl: 100, bandState: 'squeeze-release' }),
+        t({ netPnl: 100, bandState: 'expanded' }),
+      ],
+      5000,
+    );
+    expect(by['squeeze-release']!.finalEquity).toBe(5100);
+    expect(by['expanded']!.finalEquity).toBe(5100);
   });
 });

@@ -13,7 +13,12 @@ import {
   type LadderPlanInput,
 } from '@/lib/risk/ladder';
 import { INITIAL_GUARD, resetDaily, updateGuard } from '@/lib/risk/guard';
-import { computeMetrics, metricsBySetup } from '@/lib/backtest/metrics';
+import {
+  computeMetrics,
+  metricsByBandState,
+  metricsByCrossCount,
+  metricsBySetup,
+} from '@/lib/backtest/metrics';
 import {
   createPendingOrder,
   forceClose,
@@ -222,6 +227,8 @@ export function runBacktest(input: {
     signalCount,
     fillRate: signalCount === 0 ? 0 : trades.length / signalCount,
     bySetup: metricsBySetup(trades, account.equity),
+    byBandState: metricsByBandState(trades, account.equity),
+    byCrossCount: metricsByCrossCount(trades, account.equity),
     haltedBars,
   };
 }

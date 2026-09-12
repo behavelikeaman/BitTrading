@@ -6,6 +6,7 @@ import type {
 } from '@/types';
 import type { LadderPlanInput } from '@/lib/risk/ladder';
 import type { SetupKind } from '@/lib/signal/setup';
+import type { BandState } from '@/lib/signal/band-state';
 
 /**
  * 대기 중인 진입 주문.
@@ -19,6 +20,10 @@ export interface PendingOrder {
   score: number;
   /** 어떤 자리에서 난 신호인지. 셋업별 성적을 따로 재기 위해 끝까지 들고 간다. */
   setup: SetupKind;
+  /** 신호봉의 밴드 폭 상태 — 성적을 이 상태로 쪼개기 위한 진단 값 */
+  bandState: BandState;
+  /** 신호봉 기준 최근 교차 횟수 */
+  crossCount: number;
   /** 체결 시도를 시작할 캔들의 openTime */
   fromTime: number;
   limitPrice: number;
@@ -39,6 +44,8 @@ export interface OpenPosition {
   conviction: Conviction;
   score: number;
   setup: SetupKind;
+  bandState: BandState;
+  crossCount: number;
   entryTime: number;
   /** 체결된 레그 */
   filled: LadderLeg[];

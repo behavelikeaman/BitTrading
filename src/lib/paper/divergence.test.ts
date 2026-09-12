@@ -10,6 +10,8 @@ function trade(over: Partial<Trade> = {}): Trade {
     conviction: 'high',
     score: 8,
     setup: 'trend-pullback',
+    bandState: 'expanded',
+    crossCount: 1,
     legs: [],
     averageEntryPrice: 100,
     exitPrice: 101,

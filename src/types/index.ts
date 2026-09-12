@@ -1,4 +1,5 @@
 import type { SetupKind, SetupResult } from '@/lib/signal/setup';
+import type { BandState, BandStateResult } from '@/lib/signal/band-state';
 
 /** 확정 여부를 포함한 OHLCV 캔들. 배열은 항상 오름차순(과거 -> 최근)이다. */
 export interface Candle {
@@ -105,6 +106,10 @@ export interface Signal {
   indicators: IndicatorSnapshot | null;
   /** 어떤 자리인지 — 눌림목·과이격 되돌림·밴드 돌파 (ADR-022) */
   setup: SetupResult;
+  /** 신호봉의 밴드 폭 상태 (좁은 관 / 재확장 / 확장 지속 / 수축) */
+  bandState: BandStateResult;
+  /** 최근 12봉 안의 EMA12 × BB중앙선 교차 횟수. 클수록 휩소 구간이다. */
+  crossCount: number;
 }
 
 /** 서킷브레이커 상태. 백테스트에도 그대로 반영된다. */
@@ -210,6 +215,15 @@ export interface Trade {
   exitReason: ExitReason;
   /** 어떤 셋업에서 들어간 트레이드인지 (ADR-022). 셋업별 성적 비교에 쓴다. */
   setup: SetupKind;
+  /**
+   * 신호봉의 밴드 폭 상태. 성적을 이 상태로 쪼개기 위해 끝까지 들고 간다.
+   *
+   * 사용자의 관찰("좁은 관 다음의 재확장에 올라탄 교차가 수익이었다")이
+   * 데이터에 있는지 재기 위한 진단 값이다. 아직 진입 조건이 아니다.
+   */
+  bandState: BandState;
+  /** 신호봉 기준 최근 12봉 안의 교차 횟수. 3회 이상이면 휩소 구간이다. */
+  crossCount: number;
   /** 수수료·슬리피지·펀딩 차감 전 가격 손익 */
   grossPnl: number;
   fees: number;
@@ -222,7 +236,13 @@ export interface Trade {
 /** 셋업별 요약. BacktestResult에서 트레이드 목록·신호수를 뺀 지표만 */
 export type TradeMetricsSummary = Omit<
   BacktestResult,
-  'trades' | 'signalCount' | 'fillRate' | 'bySetup' | 'haltedBars'
+  | 'trades'
+  | 'signalCount'
+  | 'fillRate'
+  | 'bySetup'
+  | 'byBandState'
+  | 'byCrossCount'
+  | 'haltedBars'
 >;
 
 export interface BacktestResult {
@@ -277,6 +297,16 @@ export interface BacktestResult {
    * 여기서만 보인다. 트레이드가 없는 셋업은 키 자체가 없다.
    */
   bySetup: Partial<Record<SetupKind, TradeMetricsSummary>>;
+  /**
+   * 밴드 폭 상태별 성적 (진단용).
+   *
+   * "좁은 관 다음의 재확장에 올라탄 교차가 수익이었고, 관 안의 교차는
+   * 노이즈였다"는 관찰이 데이터에 있는지 재기 위한 표다. 아직 진입 조건이
+   * 아니다 — 필터를 먼저 걸면 표본이 무너져 우연과 구분되지 않는다.
+   */
+  byBandState: Partial<Record<BandState, TradeMetricsSummary>>;
+  /** 신호봉 기준 최근 교차 횟수별 성적. 클수록 휩소 구간의 교차다. */
+  byCrossCount: Partial<Record<string, TradeMetricsSummary>>;
   /**
    * 서킷브레이커(연속 손실·일일 손실 한도)로 진입 판정이 막힌 캔들 수.
    *

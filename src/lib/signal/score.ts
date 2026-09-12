@@ -11,8 +11,15 @@ import {
   type SetupConfig,
   type SetupResult,
 } from '@/lib/signal/setup';
+import {
+  classifyBandState,
+  countRecentCrosses,
+  DEFAULT_BAND_STATE_CONFIG,
+  type BandStateConfig,
+  type BandStateResult,
+} from '@/lib/signal/band-state';
 
-export interface ScoreConfig extends SetupConfig {
+export interface ScoreConfig extends SetupConfig, BandStateConfig {
   /** 신호봉 거래량 / 20봉 평균 거래량의 하한. 기본 1.5 */
   volumeMultiple: number;
   /** 추세 강도 하한. 기본 20 */
@@ -25,10 +32,14 @@ export interface ScoreConfig extends SetupConfig {
   sessionEndUtcHour: number;
   /** 밴드 확장 비교에 쓸 과거 bbWidth 개수. 기본 20 */
   bbWidthLookback: number;
+  /** 교차 노이즈를 셀 구간. 기본 12봉 */
+  crossLookback: number;
 }
 
 export const DEFAULT_SCORE_CONFIG: ScoreConfig = {
   ...DEFAULT_SETUP_CONFIG,
+  ...DEFAULT_BAND_STATE_CONFIG,
+  crossLookback: 12,
   volumeMultiple: 1.5,
   adxMin: 20,
   fundingLimit: 0.0003,
@@ -51,6 +62,15 @@ export interface ScoreResult {
   snapshots: (IndicatorSnapshot | null)[];
   /** 어떤 셋업인지. 같은 교차라도 배열·이격에 따라 의미가 다르다. */
   setup: SetupResult;
+  /**
+   * 밴드 폭 상태와 최근 교차 횟수.
+   *
+   * 아직 채점에 반영하지 않는다. 트레이드에 기록해 성적을 쪼개 보고,
+   * 데이터가 경험칙을 뒷받침할 때만 조건으로 승격한다.
+   */
+  bandState: BandStateResult;
+  /** 최근 crossLookback봉 안의 EMA12 × BB중앙선 교차 횟수 */
+  crossCount: number;
 }
 
 function median(values: number[]): number {
@@ -294,5 +314,13 @@ export function scoreSignal(
     `KST ${kstHour}시 (UTC ${hour}시) vs UTC ${cfg.sessionStartUtcHour}~${cfg.sessionEndUtcHour}시`,
   );
 
-  return { direction, items, indicators, snapshots, setup };
+  return {
+    direction,
+    items,
+    indicators,
+    snapshots,
+    setup,
+    bandState: classifyBandState(snapshots, lastIndex, cfg),
+    crossCount: countRecentCrosses(snapshots, lastIndex, cfg.crossLookback),
+  };
 }

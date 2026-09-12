@@ -44,7 +44,8 @@ export function evaluateEntry(
   config?: Partial<EntryConfig>,
 ): Signal {
   const cfg = { ...DEFAULT_ENTRY_CONFIG, ...config };
-  const { direction, items, indicators, snapshots, setup } = scoreSignal(ctx, cfg);
+  const { direction, items, indicators, snapshots, setup, bandState, crossCount } =
+    scoreSignal(ctx, cfg);
 
   const blockers: string[] = [];
 
@@ -92,7 +93,17 @@ export function evaluateEntry(
     else if (score >= cfg.mediumConvictionScore) conviction = 'medium';
   }
 
-  return { direction, conviction, score, items, blockers, indicators, setup };
+  return {
+    direction,
+    conviction,
+    score,
+    items,
+    blockers,
+    indicators,
+    setup,
+    bandState,
+    crossCount,
+  };
 }
 
 /** 셋업이 진입을 내지 않은 이유를 한 줄로 */

@@ -1,7 +1,8 @@
 'use client';
 
-import type { BacktestResult } from '@/types';
+import type { BacktestResult, TradeMetricsSummary } from '@/types';
 import { SETUP_LABEL, type SetupKind } from '@/lib/signal/setup';
+import { BAND_STATE_LABEL, type BandState } from '@/lib/signal/band-state';
 import {
   TIME_ZONE_LABEL,
   formatDateTime,
@@ -51,6 +52,91 @@ function Stat({
   );
 }
 
+/**
+ * 한 기준으로 쪼갠 성적표.
+ *
+ * 셋업·밴드 폭 상태·교차 횟수가 같은 열을 쓰도록 한 곳에 둔다. 표마다 열이
+ * 다르면 나란히 읽을 수 없다.
+ */
+function Breakdown({
+  title,
+  note,
+  firstColumn,
+  rows,
+}: {
+  title: string;
+  note: string;
+  firstColumn: string;
+  rows: [string, TradeMetricsSummary][];
+}) {
+  return (
+    <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
+      <h2 className="mb-1 text-sm font-semibold text-neutral-300">{title}</h2>
+      <p className="mb-3 text-xs text-neutral-400">{note}</p>
+      {rows.length === 0 ? (
+        <p className="text-sm text-neutral-400">트레이드가 없다</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs [&_td]:px-2 [&_th]:px-2">
+            <thead className="text-neutral-400">
+              <tr>
+                <th className="py-1 text-left">{firstColumn}</th>
+                <th className="py-1 text-right">건수</th>
+                <th className="py-1 text-right">승률</th>
+                <th className="py-1 text-right">필요 승률</th>
+                <th className="py-1 text-right">손익비</th>
+                <th className="py-1 text-right">기대값/건</th>
+                <th className="py-1 text-right">최대 낙폭</th>
+                <th className="py-1 text-right">청산</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(([label, m]) => (
+                <tr key={label} className="border-t border-neutral-900">
+                  <td className="py-1.5 font-medium text-neutral-100">{label}</td>
+                  <td className="text-right tabular-nums text-neutral-300">
+                    {m.totalTrades}
+                  </td>
+                  <td className="text-right tabular-nums text-neutral-300">
+                    {formatPct(m.winRate)}
+                  </td>
+                  <td
+                    className={`text-right tabular-nums ${
+                      m.requiredWinRate !== null && m.winRate < m.requiredWinRate
+                        ? 'text-[var(--color-short)]'
+                        : 'text-neutral-400'
+                    }`}
+                  >
+                    {formatPct(m.requiredWinRate)}
+                  </td>
+                  <td className="text-right tabular-nums text-neutral-300">
+                    {formatProfitFactor(m.profitFactor, m.totalTrades > 0)}
+                  </td>
+                  <td
+                    className={`text-right tabular-nums ${
+                      m.expectancy >= 0
+                        ? 'text-[var(--color-long)]'
+                        : 'text-[var(--color-short)]'
+                    }`}
+                  >
+                    {formatSignedUsd(m.expectancy)}
+                  </td>
+                  <td className="text-right tabular-nums text-neutral-300">
+                    {formatPct(m.maxDrawdown)}
+                  </td>
+                  <td className="text-right tabular-nums text-neutral-300">
+                    {m.liquidationCount}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 const REASON_LABEL: Record<string, string> = {
   'take-profit': '익절',
   'stop-loss': '손절',
@@ -67,11 +153,21 @@ export function BacktestReport({
 }: Props) {
   const netPnl = result.finalEquity - startingEquity;
   // 건수 많은 셋업부터. 표본이 큰 쪽이 먼저 읽혀야 한다.
-  const setupRows = (
-    Object.entries(result.bySetup ?? {}) as [SetupKind, BacktestResult['bySetup'][SetupKind]][]
-  )
-    .filter((e): e is [SetupKind, NonNullable<typeof e[1]>] => e[1] !== undefined)
-    .sort((a, b) => b[1].totalTrades - a[1].totalTrades);
+  const rowsOf = (
+    group: Partial<Record<string, TradeMetricsSummary>> | undefined,
+    label: (key: string) => string,
+  ): [string, TradeMetricsSummary][] =>
+    Object.entries(group ?? {})
+      .filter((e): e is [string, TradeMetricsSummary] => e[1] !== undefined)
+      .sort((a, b) => b[1].totalTrades - a[1].totalTrades)
+      .map(([key, m]) => [label(key), m]);
+
+  const setupRows = rowsOf(result.bySetup, (k) => SETUP_LABEL[k as SetupKind] ?? k);
+  const bandRows = rowsOf(result.byBandState, (k) => BAND_STATE_LABEL[k as BandState] ?? k);
+  // 교차 횟수는 '1회' < '2회' < '3회+' 순으로 읽는 게 자연스럽다.
+  const crossRows = rowsOf(result.byCrossCount, (k) => k).sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  );
   const grossProfit = result.trades
     .filter((t) => t.netPnl > 0)
     .reduce((s, t) => s + t.netPnl, 0);
@@ -226,76 +322,27 @@ export function BacktestReport({
       )}
 
       {/* 셋업별 성적 — 전체 평균은 서로 다른 자리를 섞어버린다 (ADR-022) */}
-      <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
-        <h2 className="mb-1 text-sm font-semibold text-neutral-300">
-          셋업별 성적 — 어느 자리가 돈을 벌었나
-        </h2>
-        <p className="mb-3 text-xs text-neutral-400">
-          표본이 적은 셋업의 승률은 우연과 구분되지 않는다. 30건 미만은 참고만 하라.
-        </p>
-        {setupRows.length === 0 ? (
-          <p className="text-sm text-neutral-400">트레이드가 없다</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs [&_td]:px-2 [&_th]:px-2">
-              <thead className="text-neutral-400">
-                <tr>
-                  <th className="py-1 text-left">셋업</th>
-                  <th className="py-1 text-right">건수</th>
-                  <th className="py-1 text-right">승률</th>
-                  <th className="py-1 text-right">필요 승률</th>
-                  <th className="py-1 text-right">손익비</th>
-                  <th className="py-1 text-right">기대값/건</th>
-                  <th className="py-1 text-right">최대 낙폭</th>
-                  <th className="py-1 text-right">청산</th>
-                </tr>
-              </thead>
-              <tbody>
-                {setupRows.map(([kind, m]) => (
-                  <tr key={kind} className="border-t border-neutral-900">
-                    <td className="py-1.5 font-medium text-neutral-100">
-                      {SETUP_LABEL[kind]}
-                    </td>
-                    <td className="text-right tabular-nums text-neutral-300">
-                      {m.totalTrades}
-                    </td>
-                    <td className="text-right tabular-nums text-neutral-300">
-                      {formatPct(m.winRate)}
-                    </td>
-                    <td
-                      className={`text-right tabular-nums ${
-                        m.requiredWinRate !== null && m.winRate < m.requiredWinRate
-                          ? 'text-[var(--color-short)]'
-                          : 'text-neutral-400'
-                      }`}
-                    >
-                      {formatPct(m.requiredWinRate)}
-                    </td>
-                    <td className="text-right tabular-nums text-neutral-300">
-                      {formatProfitFactor(m.profitFactor, m.totalTrades > 0)}
-                    </td>
-                    <td
-                      className={`text-right tabular-nums ${
-                        m.expectancy >= 0
-                          ? 'text-[var(--color-long)]'
-                          : 'text-[var(--color-short)]'
-                      }`}
-                    >
-                      {formatSignedUsd(m.expectancy)}
-                    </td>
-                    <td className="text-right tabular-nums text-neutral-300">
-                      {formatPct(m.maxDrawdown)}
-                    </td>
-                    <td className="text-right tabular-nums text-neutral-300">
-                      {m.liquidationCount}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <Breakdown
+        title="셋업별 성적 — 어느 자리가 돈을 벌었나"
+        note="표본이 적은 셋업의 승률은 우연과 구분되지 않는다. 30건 미만은 참고만 하라."
+        firstColumn="셋업"
+        rows={setupRows}
+      />
+
+      {/* 진단: 좁은 관 → 재확장 가설. 아직 진입 조건이 아니다. */}
+      <Breakdown
+        title="밴드 폭 상태별 성적 — 좁은 관 다음의 재확장이 다른가"
+        note="신호봉의 BB 폭 상태로 쪼갠 표다. 진입 조건이 아니라 진단이다. '좁은 관 직후 재확장'만 기대값이 뚜렷하게 낫다면 그때 채점·필터에 반영한다. 여기서도 30건 미만은 우연과 구분되지 않는다."
+        firstColumn="밴드 폭 상태"
+        rows={bandRows}
+      />
+
+      <Breakdown
+        title="교차 노이즈별 성적 — 몇 번째 교차에 들어갔나"
+        note="신호봉 기준 최근 12봉(1시간) 안의 EMA12 × BB중앙선 교차 횟수다. 1회는 조용하던 구간을 한 번에 뚫은 교차, 3회+는 좁은 관 안에서 골든·데드를 반복하던 휩소 구간의 교차다."
+        firstColumn="최근 12봉 교차"
+        rows={crossRows}
+      />
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
         <h2 className="mb-2 text-sm font-semibold text-neutral-300">
