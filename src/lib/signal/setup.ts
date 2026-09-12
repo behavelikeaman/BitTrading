@@ -41,6 +41,14 @@ export interface SetupConfig {
    * 절대 하한이 없으면 눌린 구간의 미세한 벌어짐이 전부 "과이격"이 된다.
    */
   extendedMinPct: number;
+  /**
+   * 이격 중앙값을 신뢰하기 위한 최소 표본 수. 기본 30
+   *
+   * 표본이 0이면 중앙값이 0이 되어 배수 조건이 항상 참이 된다. 몇 개뿐이면
+   * "평소보다 벌어졌는가"가 우연에 좌우된다. 판정을 못 하는 것과 판정해서
+   * 통과시키는 것은 다르다.
+   */
+  minSpreadSamples: number;
 }
 
 /**
@@ -51,6 +59,7 @@ export const DEFAULT_SETUP_CONFIG: SetupConfig = {
   spreadLookback: 100,
   extendedMedianMultiple: 1.8,
   extendedMinPct: 0.0015,
+  minSpreadSamples: 30,
 };
 
 export interface SetupResult {
@@ -72,6 +81,10 @@ export interface SetupResult {
   spreadAtr: number | null;
   /** 최근 spreadLookback봉의 |이격| 중앙값. 지금이 평소보다 벌어졌는지의 기준 */
   medianSpreadPct: number;
+  /** 중앙값 산출에 실제로 쓰인 표본 수 (현재 봉 포함). 적으면 판정을 보류한다. */
+  spreadSampleCount: number;
+  /** 이평선 스택이 확정됐는가. 거짓이면 배열은 "혼조"가 아니라 "모름"이다. */
+  stackReady: boolean;
   extended: boolean;
   /**
    * 과이격 되돌림의 구조 목표가 — 스택 반대편 끝(SMMA135).
@@ -143,6 +156,8 @@ function result(over: Partial<SetupResult> & { kind: SetupKind; detail: string }
     spreadPct: null,
     spreadAtr: null,
     medianSpreadPct: 0,
+    spreadSampleCount: 0,
+    stackReady: false,
     extended: false,
     structureTarget: null,
     label: SETUP_LABEL[over.kind],
@@ -168,7 +183,11 @@ export function classifySetup(
     return result({ kind: 'none', detail: '지표 데이터 부족' });
   }
   if (curr.stack === null) {
-    return result({ kind: 'none', detail: '이평선 스택 워밍업 중 (135봉 필요)' });
+    return result({
+      kind: 'none',
+      stackReady: false,
+      detail: '이평선 스택 워밍업 중 (135봉 필요)',
+    });
   }
 
   // 트리거: EMA12가 BB 중앙선(SMA20)을 교차했는가
@@ -185,6 +204,7 @@ export function classifySetup(
     return result({
       kind: 'none',
       alignment,
+      stackReady: true,
       spreadPct,
       spreadAtr,
       detail: `EMA12 × BB중앙선 교차 없음 (${fmt(prevDiff)} → ${fmt(currDiff)})`,
@@ -201,17 +221,25 @@ export function classifySetup(
   }
   const medianSpread = historyValues.length > 0 ? median(historyValues) : 0;
   const absSpread = spreadPct === null ? 0 : Math.abs(spreadPct);
+  // 현재 봉을 포함한 표본 수. 중앙값을 믿을 수 있는지의 기준이다.
+  const samples = historyValues.length + 1;
+  const enoughSamples = samples >= cfg.minSpreadSamples;
   const extended =
+    enoughSamples &&
     spreadPct !== null &&
     absSpread >= cfg.extendedMinPct &&
     absSpread >= medianSpread * cfg.extendedMedianMultiple;
 
-  const spreadText = `이격 ${fmt(absSpread * 100, 2)}% (최근 중앙값 ${fmt(medianSpread * 100, 2)}%)`;
+  const spreadText = enoughSamples
+    ? `이격 ${fmt(absSpread * 100, 2)}% (최근 중앙값 ${fmt(medianSpread * 100, 2)}%, 표본 ${samples})`
+    : `이격 판정 표본 부족 (${samples}/${cfg.minSpreadSamples}봉) — 과이격 판정 보류`;
 
   if (alignment === 'mixed') {
     return result({
       kind: 'band-breakout',
       cross,
+      stackReady: true,
+      spreadSampleCount: samples,
       medianSpreadPct: medianSpread,
       direction: cross,
       alignment,
@@ -231,6 +259,8 @@ export function classifySetup(
       return result({
         kind: 'overextended-chase',
         cross,
+        stackReady: true,
+        spreadSampleCount: samples,
         medianSpreadPct: medianSpread,
         alignment,
         spreadPct,
@@ -242,6 +272,8 @@ export function classifySetup(
     return result({
       kind: 'trend-pullback',
       cross,
+      stackReady: true,
+      spreadSampleCount: samples,
       medianSpreadPct: medianSpread,
       direction: cross,
       alignment,
@@ -257,6 +289,8 @@ export function classifySetup(
     return result({
       kind: 'overextended-reversion',
       cross,
+      stackReady: true,
+      spreadSampleCount: samples,
       medianSpreadPct: medianSpread,
       direction: cross,
       alignment,
@@ -271,6 +305,8 @@ export function classifySetup(
   return result({
     kind: 'none',
     cross,
+    stackReady: true,
+    spreadSampleCount: samples,
     medianSpreadPct: medianSpread,
     alignment,
     spreadPct,

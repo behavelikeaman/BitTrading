@@ -114,20 +114,28 @@ export function scoreSignal(
   );
 
   // 2. stackAlignment — 이평선이 줄을 섰는가 (SMMA 20·55·95·135)
-  const alignText =
-    setup.alignment === 'bull'
+  // 스택이 아직 없으면 "혼조"가 아니라 "모름"이다. 같은 문구로 보여주면
+  // 워밍업 중인 화면을 보고 추세가 없다고 읽게 된다.
+  const alignText = !setup.stackReady
+    ? '이평선 스택 워밍업 중 (135봉 필요) — 판정 불가'
+    : setup.alignment === 'bull'
       ? '정배열 (20>55>95>135)'
       : setup.alignment === 'bear'
         ? '역배열 (20<55<95<135)'
         : '혼조 — 추세 없음';
-  push('stackAlignment', '이평선 배열', setup.alignment !== 'mixed', alignText);
+  push(
+    'stackAlignment',
+    '이평선 배열',
+    setup.stackReady && setup.alignment !== 'mixed',
+    alignText,
+  );
 
   // 3. stackSpread — 셋업이 요구하는 이격 상태인가
   //    되돌림은 벌어져 있어야 하고, 눌림목·돌파는 벌어져 있으면 추격이다.
   const spreadText =
     setup.spreadPct === null
       ? '스택 워밍업 중 (135봉 필요)'
-      : `이격 ${fmt(Math.abs(setup.spreadPct) * 100)}% vs 최근 중앙값 ${fmt(setup.medianSpreadPct * 100)}%`;
+      : `이격 ${fmt(Math.abs(setup.spreadPct) * 100)}% vs 최근 중앙값 ${fmt(setup.medianSpreadPct * 100)}% (표본 ${setup.spreadSampleCount}봉)`;
   const spreadPassed =
     setup.kind === 'overextended-reversion'
       ? setup.extended

@@ -158,6 +158,51 @@ describe('classifySetup — 배열과 이격이 교차의 의미를 바꾼다', 
     expect(classifySetup(snaps, snaps.length - 1).kind).toBe('none');
   });
 
+  it('표본이 모자라면 과이격 판정을 하지 않는다', () => {
+    // 중앙값을 3~4개로 내면 "평소보다 벌어졌는가"가 우연에 좌우된다.
+    // 특히 표본이 0이면 중앙값이 0이 되어 모든 이격이 과이격으로 통과한다.
+    const snaps = [
+      ...history(20, 5),
+      snap({ ema12: 1001, sma20: 1000, spread: 60 }),
+      snap({ ema12: 999, sma20: 1000, spread: 60 }),
+    ];
+    const setup = classifySetup(snaps, snaps.length - 1);
+    expect(setup.extended).toBe(false);
+    expect(setup.kind).toBe('none');
+    expect(setup.detail).toContain('표본');
+  });
+
+  it('이격 표본 개수를 함께 보고한다', () => {
+    const snaps = [
+      ...history(20, 40),
+      snap({ ema12: 1001, sma20: 1000, spread: 60 }),
+      snap({ ema12: 999, sma20: 1000, spread: 60 }),
+    ];
+    // 과거 40개 + 직전 봉 1개 + 현재 봉 1개
+    const setup = classifySetup(snaps, snaps.length - 1);
+    expect(setup.spreadSampleCount).toBe(42);
+  });
+
+  it('스택이 없으면 배열을 "혼조"로 단정하지 않는다', () => {
+    // 혼조(추세 없음)와 데이터 부족(모름)은 다른 상태다. 같은 이름으로
+    // 보여주면 워밍업 중인 화면을 보고 "추세가 없구나"라고 읽게 된다.
+    const noStack: IndicatorSnapshot = {
+      ...snap({ ema12: 1001, sma20: 1000, spread: 20 }),
+      stack: null,
+    };
+    const setup = classifySetup([noStack, noStack], 1);
+    expect(setup.stackReady).toBe(false);
+  });
+
+  it('스택이 있으면 stackReady가 참이다', () => {
+    const snaps = [
+      ...history(20),
+      snap({ ema12: 999, sma20: 1000, spread: 20 }),
+      snap({ ema12: 1001, sma20: 1000, spread: 20 }),
+    ];
+    expect(classifySetup(snaps, snaps.length - 1).stackReady).toBe(true);
+  });
+
   it('스택 워밍업 전에는 셋업을 내지 않는다', () => {
     const noStack: IndicatorSnapshot = {
       ...snap({ ema12: 1001, sma20: 1000, spread: 20 }),

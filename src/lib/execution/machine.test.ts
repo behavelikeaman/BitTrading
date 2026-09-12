@@ -230,6 +230,8 @@ describe('createPendingOrder', () => {
         spreadPct: 0.01,
         spreadAtr: 1,
         medianSpreadPct: 0.01,
+        spreadSampleCount: 100,
+        stackReady: true,
         extended: false,
         structureTarget: null,
         label: '눌림목 재진입',

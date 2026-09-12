@@ -16,7 +16,10 @@ export type CredentialReason =
   | 'rejected'
   | 'exchange-error';
 
-export interface CredentialFacts {
+const MISSING_PASSPHRASE_HINT =
+  '패스프레이즈는 발급되는 값이 아니라 키를 만들 때 직접 정한 비밀번호다. 입력란이 없었다면 이 계정에는 없는 것이고, 있었다면 .env.local에 넣어라.';
+
+export interface CredentialStatusInput {
   hasApiKey: boolean;
   hasSecret: boolean;
   hasPassphrase: boolean;
@@ -29,13 +32,16 @@ export interface CredentialFacts {
   networkError: boolean;
 }
 
+/** @deprecated 이름만 남긴 별칭 */
+export type CredentialFacts = CredentialStatusInput;
+
 export interface CredentialStatus {
   ok: boolean;
   reason: CredentialReason;
   message: string;
 }
 
-export function describeCredentials(facts: CredentialFacts): CredentialStatus {
+export function describeCredentials(facts: CredentialStatusInput): CredentialStatus {
   const { hasApiKey, hasSecret, hasPassphrase } = facts;
 
   if (!hasApiKey && !hasSecret && !hasPassphrase) {
@@ -43,27 +49,34 @@ export function describeCredentials(facts: CredentialFacts): CredentialStatus {
       ok: false,
       reason: 'no-keys',
       message:
-        '읽기 전용 키가 없다. .env.local에 DEEPCOIN_API_KEY·SECRET·PASSPHRASE를 넣으면 수수료와 슬리피지가 실측으로 바뀐다.',
+        '읽기 전용 키가 없다. .env.local에 DEEPCOIN_API_KEY·SECRET를 넣으면 수수료와 슬리피지가 실측으로 바뀐다.',
     };
   }
 
-  if (hasApiKey && hasSecret && !hasPassphrase) {
-    // 발급 화면에는 APIKey와 SecretKey만 표시된다. 패스프레이즈는 거래소가
-    // 발급하는 값이 아니라 키를 만들 때 사용자가 입력한 비밀번호다.
-    return {
-      ok: false,
-      reason: 'missing-passphrase',
-      message:
-        '패스프레이즈가 비어 있다. 발급되는 값이 아니라 키를 만들 때 직접 정한 비밀번호다. 기억나지 않으면 키를 새로 만들어라 — 복구되지 않는다.',
-    };
-  }
-
-  if (!hasApiKey || !hasSecret || !hasPassphrase) {
+  if (!hasApiKey || !hasSecret) {
     return {
       ok: false,
       reason: 'incomplete',
-      message: '키 세 값 중 일부가 비어 있다. .env.local을 확인하라.',
+      message: 'API 키나 시크릿이 비어 있다. .env.local을 확인하라.',
     };
+  }
+
+  // 호출을 실제로 해봤다면 판정은 거래소 응답이 한다. 여기서 미리
+  // "패스프레이즈가 없어서 안 된다"고 단정하면, 패스프레이즈 없이도 되는
+  // 계정에서 거짓 경고를 띄우게 된다.
+  const attempted = facts.httpStatus !== null || facts.networkError;
+  if (!attempted) {
+    return hasPassphrase
+      ? {
+          ok: false,
+          reason: 'incomplete',
+          message: '키를 읽었지만 호출하지 못했다.',
+        }
+      : {
+          ok: false,
+          reason: 'missing-passphrase',
+          message: MISSING_PASSPHRASE_HINT,
+        };
   }
 
   if (facts.networkError) {
@@ -74,38 +87,51 @@ export function describeCredentials(facts: CredentialFacts): CredentialStatus {
     };
   }
 
-  if (facts.httpStatus === 401 || facts.httpStatus === 403) {
-    return {
-      ok: false,
-      reason: 'rejected',
-      message: `거래소가 인증을 거부했다 (HTTP ${facts.httpStatus}). 패스프레이즈·시크릿이 맞는지, IP 화이트리스트에 지금 IP가 있는지 확인하라.`,
-    };
+  const status = facts.httpStatus;
+  const code = facts.exchangeCode;
+  const rejected =
+    status === 401 || status === 403 || (code !== null && code !== '0');
+
+  if (rejected) {
+    const detail =
+      code !== null && code !== '0'
+        ? `code ${code}: ${facts.exchangeMessage ?? '메시지 없음'}`
+        : `HTTP ${status}`;
+    // 패스프레이즈가 비어 있는 채로 거부당했다면 그것이 가장 유력한 원인이다.
+    return hasPassphrase
+      ? {
+          ok: false,
+          reason: 'rejected',
+          message: `거래소가 요청을 거부했다 (${detail}). 패스프레이즈·시크릿이 맞는지, IP 화이트리스트에 지금 IP가 있는지 확인하라.`,
+        }
+      : {
+          ok: false,
+          reason: 'missing-passphrase',
+          message: `거래소가 요청을 거부했다 (${detail}). ${MISSING_PASSPHRASE_HINT}`,
+        };
   }
 
-  if (facts.httpStatus !== null && facts.httpStatus >= 500) {
+  if (status !== null && status >= 500) {
     return {
       ok: false,
       reason: 'exchange-error',
-      message: `거래소 응답 오류 (HTTP ${facts.httpStatus}). 잠시 뒤 다시 시도하라.`,
+      message: `거래소 응답 오류 (HTTP ${status}). 잠시 뒤 다시 시도하라.`,
     };
   }
 
-  if (facts.exchangeCode !== null && facts.exchangeCode !== '0') {
-    const detail = facts.exchangeMessage ?? '메시지 없음';
-    return {
-      ok: false,
-      reason: 'rejected',
-      message: `거래소가 요청을 거부했다 (code ${facts.exchangeCode}): ${detail}. 패스프레이즈·시크릿·IP 화이트리스트를 확인하라.`,
-    };
-  }
-
-  if (facts.httpStatus !== null && facts.httpStatus >= 400) {
+  if (status !== null && status >= 400) {
     return {
       ok: false,
       reason: 'exchange-error',
-      message: `요청이 거부됐다 (HTTP ${facts.httpStatus}).`,
+      message: `요청이 거부됐다 (HTTP ${status}).`,
     };
   }
 
-  return { ok: true, reason: 'ok', message: '읽기 전용 키 정상 — 실측값을 쓰는 중이다.' };
+  return {
+    ok: true,
+    reason: 'ok',
+    message: hasPassphrase
+      ? '읽기 전용 키 정상 — 실측값을 쓰는 중이다.'
+      : '읽기 전용 키 정상 — 이 계정은 패스프레이즈 없이 동작한다.',
+  };
 }
