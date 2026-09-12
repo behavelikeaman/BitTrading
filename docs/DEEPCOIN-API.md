@@ -46,6 +46,22 @@ code 50104: Request header 'DC-ACCESS-PASSPHRASE' can't be empty.
 코드는 패스프레이즈가 없어도 호출을 시도한다. 미리 포기하면 위 응답을 볼 수
 없기 때문이다. 판정과 안내 문구는 `src/lib/credential-status.ts`에 있다.
 
+#### `.env.local`의 `$`가 패스프레이즈를 조용히 자른다
+
+Next.js(`@next/env`)는 값 안의 `$`를 환경변수 참조로 보고 치환한다. 없는
+변수면 빈 문자열이 되어 **`$` 앞부분만 남는다.** 실측 결과:
+
+| `.env.local` 표기 | 실제 값 |
+|---|---|
+| `ab$cdef1` | `ab` |
+| `'ab$cdef1'` | `ab` |
+| `"ab$cdef1"` | `ab` |
+| `ab\$cdef1` | `ab$cdef1` |
+
+**따옴표로는 막을 수 없고 역슬래시만 통한다.** 이 경우 거래소는 code 50105
+(passphrase incorrect)를 준다. 배지가 전송된 패스프레이즈 **길이**를 함께
+보여주므로, 길이가 실제 비밀번호보다 짧으면 이 문제다.
+
 ## 인증 (비공개 엔드포인트)
 
 헤더 5개:
