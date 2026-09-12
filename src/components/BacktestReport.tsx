@@ -1,6 +1,7 @@
 'use client';
 
 import type { BacktestResult } from '@/types';
+import { SETUP_LABEL, type SetupKind } from '@/lib/signal/setup';
 import {
   TIME_ZONE_LABEL,
   formatDateTime,
@@ -58,6 +59,12 @@ const REASON_LABEL: Record<string, string> = {
 
 export function BacktestReport({ result, breakEvenWinRate, startingEquity }: Props) {
   const netPnl = result.finalEquity - startingEquity;
+  // 건수 많은 셋업부터. 표본이 큰 쪽이 먼저 읽혀야 한다.
+  const setupRows = (
+    Object.entries(result.bySetup ?? {}) as [SetupKind, BacktestResult['bySetup'][SetupKind]][]
+  )
+    .filter((e): e is [SetupKind, NonNullable<typeof e[1]>] => e[1] !== undefined)
+    .sort((a, b) => b[1].totalTrades - a[1].totalTrades);
   const grossProfit = result.trades
     .filter((t) => t.netPnl > 0)
     .reduce((s, t) => s + t.netPnl, 0);
@@ -152,6 +159,68 @@ export function BacktestReport({ result, breakEvenWinRate, startingEquity }: Pro
           tone={result.liquidationCount > 0 ? 'bad' : 'good'}
         />
         <Stat label="총이익" value={`${formatUsd(grossProfit)} USDT`} tone="good" />
+      </section>
+
+      {/* 셋업별 성적 — 전체 평균은 서로 다른 자리를 섞어버린다 (ADR-022) */}
+      <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
+        <h2 className="mb-1 text-sm font-semibold text-neutral-300">
+          셋업별 성적 — 어느 자리가 돈을 벌었나
+        </h2>
+        <p className="mb-3 text-xs text-neutral-400">
+          표본이 적은 셋업의 승률은 우연과 구분되지 않는다. 30건 미만은 참고만 하라.
+        </p>
+        {setupRows.length === 0 ? (
+          <p className="text-sm text-neutral-400">트레이드가 없다</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs [&_td]:px-2 [&_th]:px-2">
+              <thead className="text-neutral-400">
+                <tr>
+                  <th className="py-1 text-left">셋업</th>
+                  <th className="py-1 text-right">건수</th>
+                  <th className="py-1 text-right">승률</th>
+                  <th className="py-1 text-right">손익비</th>
+                  <th className="py-1 text-right">기대값/건</th>
+                  <th className="py-1 text-right">최대 낙폭</th>
+                  <th className="py-1 text-right">청산</th>
+                </tr>
+              </thead>
+              <tbody>
+                {setupRows.map(([kind, m]) => (
+                  <tr key={kind} className="border-t border-neutral-900">
+                    <td className="py-1.5 font-medium text-neutral-100">
+                      {SETUP_LABEL[kind]}
+                    </td>
+                    <td className="text-right tabular-nums text-neutral-300">
+                      {m.totalTrades}
+                    </td>
+                    <td className="text-right tabular-nums text-neutral-300">
+                      {formatPct(m.winRate)}
+                    </td>
+                    <td className="text-right tabular-nums text-neutral-300">
+                      {formatProfitFactor(m.profitFactor, m.totalTrades > 0)}
+                    </td>
+                    <td
+                      className={`text-right tabular-nums ${
+                        m.expectancy >= 0
+                          ? 'text-[var(--color-long)]'
+                          : 'text-[var(--color-short)]'
+                      }`}
+                    >
+                      {formatSignedUsd(m.expectancy)}
+                    </td>
+                    <td className="text-right tabular-nums text-neutral-300">
+                      {formatPct(m.maxDrawdown)}
+                    </td>
+                    <td className="text-right tabular-nums text-neutral-300">
+                      {m.liquidationCount}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">

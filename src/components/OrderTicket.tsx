@@ -1,6 +1,7 @@
 'use client';
 
 import type { PositionPlan, Signal } from '@/types';
+import { SCORE_ITEM_COUNT } from '@/lib/signal/score';
 import {
   formatPct,
   formatPrice,
@@ -50,6 +51,27 @@ function Row({
 }
 
 /**
+ * 어떤 자리인지 한 줄로 띄운다.
+ *
+ * 점수만 보면 눌림목 재진입과 과이격 되돌림이 구분되지 않는다. 둘은
+ * 방향도 목표도 다른 자리라, 같은 9점이라도 주문을 넣는 손이 달라야 한다.
+ */
+function SetupBanner({ setup }: { setup: Signal['setup'] }) {
+  const tone =
+    setup.kind === 'overextended-reversion'
+      ? 'border-[var(--color-warn)]/50 bg-[var(--color-warn)]/10 text-[var(--color-warn)]'
+      : setup.kind === 'overextended-chase'
+        ? 'border-[var(--color-short)]/50 bg-[var(--color-short)]/10 text-[var(--color-short)]'
+        : 'border-neutral-700 bg-neutral-900 text-neutral-200';
+  return (
+    <div className={`mb-3 rounded border px-3 py-2 ${tone}`}>
+      <div className="text-sm font-semibold">{setup.label}</div>
+      <div className="mt-0.5 text-xs text-neutral-400">{setup.detail}</div>
+    </div>
+  );
+}
+
+/**
  * 주문을 넣기 전에 확인해야 할 숫자만 크게 보여준다.
  *
  * 진입 불가 상태에서는 계획 대신 차단 사유를 크게 띄운다. "왜 진입하면
@@ -83,6 +105,7 @@ export function OrderTicket({ signal, plan, equity, costEstimated }: Props) {
     return (
       <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
         <h2 className="mb-3 text-sm font-semibold text-neutral-300">진입 불가</h2>
+        <SetupBanner setup={signal.setup} />
         {signal.blockers.length > 0 ? (
           <ul className="space-y-1">
             {signal.blockers.map((blocker) => (
@@ -93,7 +116,7 @@ export function OrderTicket({ signal, plan, equity, costEstimated }: Props) {
           </ul>
         ) : (
           <p className="text-base text-neutral-400">
-            점수 {signal.score}/8 — 확신도 기준 미달
+            점수 {signal.score}/{SCORE_ITEM_COUNT} — 확신도 기준 미달
           </p>
         )}
       </section>
@@ -118,6 +141,8 @@ export function OrderTicket({ signal, plan, equity, costEstimated }: Props) {
           {isLong ? '롱' : '숏'} · {plan.conviction === 'high' ? '확신' : '약간의 확신'}
         </span>
       </div>
+
+      <SetupBanner setup={signal.setup} />
 
       <div className="mb-3 border-b border-neutral-800 pb-2">
         {plan.legs.map((leg) => (
@@ -161,6 +186,15 @@ export function OrderTicket({ signal, plan, equity, costEstimated }: Props) {
           value={formatPct(plan.targetNetReturnOnMargin)}
           tone="muted"
         />
+        {signal.setup.structureTarget !== null && (
+          // 되돌림 셋업의 구조 목표(스택 하단). 지금 엔진의 익절은 고정 R배수라
+          // 여기까지 들고 가지 않는다. 어느 쪽이 나은지는 백테스트로 정한다.
+          <Row
+            label="구조 목표 (스택 하단, 참고)"
+            value={formatPrice(signal.setup.structureTarget)}
+            tone="muted"
+          />
+        )}
       </div>
     </section>
   );

@@ -60,3 +60,89 @@ export function realisticBreakout(): number[] {
 export function risingHtf(count = 80): number[] {
   return Array.from({ length: count }, (_, i) => 100 + i * 0.5);
 }
+
+/**
+ * 2번 케이스 — 눌림목 재진입 롱.
+ *
+ * 스택이 정배열로 자리잡을 만큼 완만히 오른 뒤(135봉 워밍업), 눌림에서
+ * EMA12가 BB중앙선 아래로 내려갔다가 마지막 봉에서 다시 위로 교차한다.
+ * 이격은 평소 수준을 유지해 "과이격 추격"으로 분류되지 않아야 한다.
+ */
+export function trendPullbackLong(): number[] {
+  const closes: number[] = [];
+  let p = 100;
+  // 스택 형성 — 빠른 선이 느린 선 위로 자리잡을 만큼 길게 간다.
+  for (let i = 0; i < 160; i++) {
+    p += 0.3 + (i % 4 === 0 ? -0.12 : 0.05);
+    closes.push(p);
+  }
+  // 눌림 — EMA12가 중앙선 아래로
+  for (let i = 0; i < 6; i++) {
+    p -= 0.9;
+    closes.push(p);
+  }
+  // 재개 — 마지막 봉에서 상향 교차
+  for (const step of [2.0, 2.6, 3.2]) {
+    p += step;
+    closes.push(p);
+  }
+  return closes;
+}
+
+/**
+ * 1번 케이스 — 과이격 후 되돌림 숏.
+ *
+ * 정배열 상태에서 급한 상승으로 스택 간격이 평소보다 크게 벌어진 뒤,
+ * EMA12가 BB중앙선을 하향 교차한다. 배열은 아직 정배열이라 "추세 반대"
+ * 교차이며, 벌어진 간격이 되돌림의 근거다.
+ */
+export function overextendedReversionShort(): number[] {
+  const closes: number[] = [];
+  let p = 100;
+  // 평소 이격 수준을 만드는 완만한 상승
+  for (let i = 0; i < 150; i++) {
+    p += 0.12 + (i % 4 === 0 ? -0.05 : 0.02);
+    closes.push(p);
+  }
+  // 급등 — 빠른 선만 끌어올려 간격을 벌린다. 평소 이격의 1.8배를 넘겨야
+  // "벌어졌다"로 분류되므로 충분히 길게 간다.
+  for (let i = 0; i < 30; i++) {
+    p += 0.8;
+    closes.push(p);
+  }
+  // 꺾임 — 마지막 봉에서 하향 교차
+  for (const step of [5, 6, 7]) {
+    p -= step;
+    closes.push(p);
+  }
+  return closes;
+}
+
+/**
+ * 과이격 추격 — 진입하면 안 되는 자리.
+ *
+ * 급등으로 간격이 벌어진 뒤 잠깐 눌렸다가 추세 방향으로 다시 교차한다.
+ * 모양만 보면 눌림목 재진입과 똑같지만, 스택이 이미 벌어져 있어서
+ * 되돌림을 정면으로 맞는 자리다.
+ */
+export function overextendedChaseLong(): number[] {
+  const closes: number[] = [];
+  let p = 100;
+  for (let i = 0; i < 150; i++) {
+    p += 0.12 + (i % 4 === 0 ? -0.05 : 0.02);
+    closes.push(p);
+  }
+  for (let i = 0; i < 30; i++) {
+    p += 0.8;
+    closes.push(p);
+  }
+  for (let i = 0; i < 4; i++) {
+    p -= 3;
+    closes.push(p);
+  }
+  for (const step of [3, 4, 6]) {
+    p += step;
+    closes.push(p);
+  }
+  return closes;
+}

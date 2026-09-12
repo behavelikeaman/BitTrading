@@ -6,8 +6,14 @@ import { DEFAULT_BACKTEST_PARAMS, type BacktestParams } from '@/lib/backtest/eng
 const MS_5M = 300_000;
 const MS_15M = 900_000;
 
-/** 세션 필터를 통과하는 UTC 12시 기준 시작 시각 */
-export const START_MS = Date.UTC(2026, 0, 5, 9, 0, 0);
+/**
+ * 시나리오의 진입 신호가 UTC 15:10(세션 안)에 떨어지도록 맞춘 시작 시각.
+ *
+ * 스택 워밍업 120봉이 앞에 붙으면서 신호봉이 10시간 뒤로 밀렸다. 펀딩
+ * 경계(00·08·16시) 통과 여부를 검증하는 테스트가 진입 시각에 의존하므로
+ * 시작점을 그만큼 당겨 신호 시각을 유지한다.
+ */
+export const START_MS = Date.UTC(2026, 0, 4, 23, 0, 0);
 
 export const TEST_ACCOUNT: AccountConfig = {
   ...DEFAULT_ACCOUNT,
@@ -111,8 +117,20 @@ export interface Bar {
   volume?: number;
 }
 
+/**
+ * 이평선 스택(SMMA135)이 확정될 때까지 끌고 가는 도입부.
+ *
+ * 스택이 없으면 셋업 분류가 되지 않아 진입 자체가 나오지 않는다 (ADR-022).
+ * repeatingBreakouts의 첫 구간과 같은 기울기로 이어붙여 추세를 끊지 않는다.
+ */
+function stackWarmup(count = 120, endPrice = 100): number[] {
+  const slope = 0.3;
+  const start = endPrice - count * slope;
+  return Array.from({ length: count }, (_, i) => start + i * slope);
+}
+
 /** 워밍업 구간(진입 신호가 정확히 여기서 나도록 잘라둔 것)의 종가 */
-const WARMUP_CLOSES = repeatingBreakouts(1).slice(0, 74);
+const WARMUP_CLOSES = [...stackWarmup(), ...repeatingBreakouts(1).slice(0, 74)];
 
 /**
  * 워밍업으로 진입을 하나 만들고, **진입 이후 캔들을 직접 지정**한다.

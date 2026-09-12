@@ -1,8 +1,14 @@
 import type { Candle, Conviction, Direction, GuardState } from '@/types';
 import type { OpenPosition, PendingOrder } from '@/lib/execution/types';
 
-/** 저장 형식이 바뀌면 올린다. 다르면 parseState가 null을 반환한다. */
-export const PAPER_STATE_VERSION = 1;
+/**
+ * 저장 형식이 바뀌면 올린다. 다르면 parseState가 null을 반환한다.
+ *
+ * v2: 포지션에 setup(셋업 종류)이 추가됐다 (ADR-022). 채점 기준 자체가
+ * 바뀌었으므로 v1 상태를 이어서 쓰면 이전 규칙으로 잡은 포지션을 새 규칙의
+ * 성적에 섞게 된다. 버리고 새로 시작하는 편이 맞다.
+ */
+export const PAPER_STATE_VERSION = 2;
 
 export interface PaperState {
   version: number;

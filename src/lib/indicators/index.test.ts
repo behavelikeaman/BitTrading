@@ -59,4 +59,25 @@ describe('computeIndicators', () => {
   it('빈 배열은 빈 배열을 반환한다', () => {
     expect(computeIndicators([])).toEqual([]);
   });
+
+  it('SMMA 스택은 135봉 워밍업 전까지 null이다', () => {
+    // 스택은 가장 느린 선(SMMA135)이 확정돼야 배열을 판정할 수 있다.
+    // 나머지 지표는 그대로 쓰므로 스냅샷 자체를 null로 만들지는 않는다.
+    const out = computeIndicators(series(60));
+    const last = out[out.length - 1]!;
+    expect(last.stack).toBeNull();
+  });
+
+  it('135봉이 넘으면 스택이 채워지고 빠른 선일수록 최근 가격에 가깝다', () => {
+    const out = computeIndicators(series(200));
+    const stack = out[out.length - 1]!.stack!;
+    expect(stack).not.toBeNull();
+    for (const v of [stack.smma20, stack.smma55, stack.smma95, stack.smma135]) {
+      expect(Number.isFinite(v)).toBe(true);
+    }
+    // 완만한 상승 시리즈이므로 빠른 선이 느린 선보다 위에 있다 (정배열).
+    expect(stack.smma20).toBeGreaterThan(stack.smma55);
+    expect(stack.smma55).toBeGreaterThan(stack.smma95);
+    expect(stack.smma95).toBeGreaterThan(stack.smma135);
+  });
 })

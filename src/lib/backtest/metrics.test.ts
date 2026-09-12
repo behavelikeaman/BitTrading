@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeMetrics } from '@/lib/backtest/metrics';
+import { computeMetrics, metricsBySetup } from '@/lib/backtest/metrics';
 import type { Trade } from '@/types';
 
 function trade(netPnl: number, over: Partial<Trade> = {}): Trade {
@@ -9,6 +9,7 @@ function trade(netPnl: number, over: Partial<Trade> = {}): Trade {
     direction: 'long',
     conviction: 'high',
     score: 8,
+    setup: 'trend-pullback',
     legs: [],
     averageEntryPrice: 100,
     exitPrice: 100,
@@ -114,5 +115,56 @@ describe('computeMetrics — 자본 곡선', () => {
     expect(m.equityCurve[0].equity).toBeCloseTo(5100, 10);
     expect(m.equityCurve[1].equity).toBeCloseTo(5050, 10);
     expect(m.equityCurve[1].equity).toBeCloseTo(m.finalEquity, 10);
+  });
+});
+
+describe('metricsBySetup — 셋업별로 따로 재야 경험칙이 검증된다', () => {
+  function t(setup: Trade['setup'], netPnl: number, over: Partial<Trade> = {}): Trade {
+    return { ...trade(netPnl, over), setup };
+  }
+
+  it('셋업별로 나눠 각각의 지표를 낸다', () => {
+    const trades = [
+      t('trend-pullback', 100),
+      t('trend-pullback', -50),
+      t('overextended-reversion', 300),
+      t('overextended-reversion', 200),
+    ];
+    const by = metricsBySetup(trades, 5000);
+    expect(by['trend-pullback']!.totalTrades).toBe(2);
+    expect(by['trend-pullback']!.winRate).toBe(0.5);
+    expect(by['overextended-reversion']!.totalTrades).toBe(2);
+    expect(by['overextended-reversion']!.winRate).toBe(1);
+  });
+
+  it('트레이드가 없는 셋업은 결과에 담지 않는다', () => {
+    const by = metricsBySetup([t('trend-pullback', 100)], 5000);
+    expect(Object.keys(by)).toEqual(['trend-pullback']);
+  });
+
+  it('각 셋업의 자본곡선은 같은 시작 자본에서 출발한다', () => {
+    // 셋업끼리 비교하려면 같은 출발점이어야 한다. 한쪽이 먼저 번 돈을
+    // 다른 쪽 출발 자본에 얹으면 순서가 성적을 만든다.
+    const by = metricsBySetup(
+      [t('trend-pullback', 100), t('overextended-reversion', 100)],
+      5000,
+    );
+    expect(by['trend-pullback']!.finalEquity).toBe(5100);
+    expect(by['overextended-reversion']!.finalEquity).toBe(5100);
+  });
+
+  it('전체 지표와 셋업별 지표의 트레이드 수 합이 같다', () => {
+    const trades = [
+      t('trend-pullback', 100),
+      t('overextended-reversion', -40),
+      t('band-breakout', 10),
+    ];
+    const by = metricsBySetup(trades, 5000);
+    const sum = Object.values(by).reduce((acc, m) => acc + m!.totalTrades, 0);
+    expect(sum).toBe(computeMetrics(trades, 5000).totalTrades);
+  });
+
+  it('빈 목록은 빈 객체다', () => {
+    expect(metricsBySetup([], 5000)).toEqual({});
   });
 });

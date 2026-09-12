@@ -16,7 +16,8 @@ import {
  * 동일해야 한다. 달라진다면 어딘가에서 미래 데이터를 보고 있다는 뜻이다.
  */
 describe('룩어헤드 편향', () => {
-  const closes = repeatingBreakouts(4);
+  // 스택 워밍업(135봉) 뒤로도 트레이드가 여러 번 나와야 절단 비교가 의미 있다.
+  const closes = repeatingBreakouts(12);
   const volumes = breakoutVolumes(closes);
   const full5m = candles5m(closes, { volume: volumes });
   const full15m = candles15m(risingHtfFor(closes.length));

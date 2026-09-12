@@ -1,9 +1,10 @@
 import type { BacktestResult, Trade } from '@/types';
+import type { SetupKind } from '@/lib/signal/setup';
 
 /** 신호 수·체결률은 엔진만 알 수 있으므로 여기서는 트레이드에서 나오는 지표만 낸다. */
 export type TradeMetrics = Omit<
   BacktestResult,
-  'trades' | 'signalCount' | 'fillRate'
+  'trades' | 'signalCount' | 'fillRate' | 'bySetup'
 >;
 
 /**
@@ -87,4 +88,33 @@ export function computeMetrics(
     liquidationCount,
     equityCurve,
   };
+}
+
+/**
+ * 셋업별로 성과를 따로 낸다.
+ *
+ * 전체 평균은 서로 다른 자리를 섞어버린다. 눌림목 재진입과 과이격 되돌림은
+ * 방향도 목표도 다른 매매라, 하나가 다른 하나의 성적을 가릴 수 있다.
+ * 사용자의 경험칙("이 두 자리가 잘 먹힌다")을 검증하려면 자리별로 승률과
+ * 기대값을 봐야 한다 (ADR-022).
+ *
+ * 각 셋업은 같은 시작 자본에서 출발한다. 순서에 따라 출발 자본이 달라지면
+ * 먼저 나온 셋업이 유리해져 비교가 무의미해진다.
+ */
+export function metricsBySetup(
+  trades: Trade[],
+  startingEquity: number,
+): Partial<Record<SetupKind, TradeMetrics>> {
+  const grouped = new Map<SetupKind, Trade[]>();
+  for (const trade of trades) {
+    const list = grouped.get(trade.setup);
+    if (list === undefined) grouped.set(trade.setup, [trade]);
+    else list.push(trade);
+  }
+
+  const out: Partial<Record<SetupKind, TradeMetrics>> = {};
+  for (const [setup, list] of grouped) {
+    out[setup] = computeMetrics(list, startingEquity);
+  }
+  return out;
 }

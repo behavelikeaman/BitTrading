@@ -1,3 +1,5 @@
+import type { SetupKind, SetupResult } from '@/lib/signal/setup';
+
 /** 확정 여부를 포함한 OHLCV 캔들. 배열은 항상 오름차순(과거 -> 최근)이다. */
 export interface Candle {
   /** ms epoch, 캔들 시작 시각 */
@@ -13,6 +15,24 @@ export interface Candle {
 
 export type Direction = 'long' | 'short';
 
+/**
+ * 사용자 차트의 이평선 스택 (SMMA 20·55·95·135).
+ *
+ * 화면의 빨강·파랑·흰색·노랑 선과 같은 값이어야 한다. 배열(정/역)과
+ * 이격도 판정의 기준선이며, 과이격 되돌림 셋업의 목표가(스택 하단)도
+ * 여기서 나온다.
+ */
+export interface MaStack {
+  /** 빨강 — 가장 빠른 선 */
+  smma20: number;
+  /** 파랑 */
+  smma55: number;
+  /** 흰색 */
+  smma95: number;
+  /** 노랑 — 가장 느린 선. 정배열에서 스택 하단이다. */
+  smma135: number;
+}
+
 /** 한 캔들 시점의 지표 묶음. 워밍업이 끝나지 않은 구간에서는 null이 된다. */
 export interface IndicatorSnapshot {
   ema12: number;
@@ -25,6 +45,14 @@ export interface IndicatorSnapshot {
   atr14: number;
   adx14: number;
   volumeSma20: number;
+  /**
+   * 이평선 스택. SMMA135가 확정되기 전(135봉 미만)에는 null이다.
+   *
+   * 스냅샷 전체를 null로 만들지 않는 이유는, 나머지 지표만으로도 화면에
+   * 현재 상태를 보여줄 수 있기 때문이다. 다만 셋업 분류는 스택이 있어야
+   * 가능하므로 null이면 진입 판정이 나지 않는다.
+   */
+  stack: MaStack | null;
 }
 
 /** 확신도 등급. 리스크 예산을 결정한다 (ADR-009). */
@@ -33,6 +61,8 @@ export type Conviction = 'high' | 'medium' | 'none';
 export type ScoreKey =
   | 'bbPosition'
   | 'emaCross'
+  | 'stackAlignment'
+  | 'stackSpread'
   | 'bandExpansion'
   | 'volume'
   | 'higherTimeframe'
@@ -66,13 +96,15 @@ export interface SignalContext {
 export interface Signal {
   direction: Direction | null;
   conviction: Conviction;
-  /** 통과한 항목 수 (0~8) */
+  /** 통과한 항목 수 (0~10) */
   score: number;
-  /** 8개 전부. 실패 항목도 이유와 함께 남긴다. */
+  /** 10개 전부. 실패 항목도 이유와 함께 남긴다. */
   items: ScoreItem[];
   /** 무효 필터에 걸린 사유. 비어 있어야 진입 가능. */
   blockers: string[];
   indicators: IndicatorSnapshot | null;
+  /** 어떤 자리인지 — 눌림목·과이격 되돌림·밴드 돌파 (ADR-022) */
+  setup: SetupResult;
 }
 
 /** 서킷브레이커 상태. 백테스트에도 그대로 반영된다. */
@@ -176,6 +208,8 @@ export interface Trade {
   averageEntryPrice: number;
   exitPrice: number;
   exitReason: ExitReason;
+  /** 어떤 셋업에서 들어간 트레이드인지 (ADR-022). 셋업별 성적 비교에 쓴다. */
+  setup: SetupKind;
   /** 수수료·슬리피지·펀딩 차감 전 가격 손익 */
   grossPnl: number;
   fees: number;
@@ -184,6 +218,12 @@ export interface Trade {
   /** 진입 시점 자본 대비 */
   netPnlPct: number;
 }
+
+/** 셋업별 요약. BacktestResult에서 트레이드 목록·신호수를 뺀 지표만 */
+export type TradeMetricsSummary = Omit<
+  BacktestResult,
+  'trades' | 'signalCount' | 'fillRate' | 'bySetup'
+>;
 
 export interface BacktestResult {
   trades: Trade[];
@@ -211,4 +251,11 @@ export interface BacktestResult {
   /** signalCount 대비 실제 체결 비율. 지정가 진입의 역선택 크기 (ADR-015) */
   fillRate: number;
   equityCurve: { time: number; equity: number }[];
+  /**
+   * 셋업별 성적 (ADR-022).
+   *
+   * 전체 평균은 서로 다른 자리를 섞는다. 어느 자리가 실제로 돈을 벌어주는지는
+   * 여기서만 보인다. 트레이드가 없는 셋업은 키 자체가 없다.
+   */
+  bySetup: Partial<Record<SetupKind, TradeMetricsSummary>>;
 }

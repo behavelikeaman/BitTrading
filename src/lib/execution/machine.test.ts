@@ -33,6 +33,7 @@ function position(over: Partial<OpenPosition> = {}): OpenPosition {
     direction: 'long',
     conviction: 'high',
     score: 8,
+    setup: 'trend-pullback',
     entryTime: T0,
     filled: [
       { index: 0, price: 100, qty: 1, notional: 100, margin: 10 },
@@ -218,9 +219,22 @@ describe('createPendingOrder', () => {
     return {
       direction: 'long',
       conviction: 'high',
-      score: 8,
+      score: 9,
       items: [],
       blockers: [],
+      setup: {
+        kind: 'trend-pullback',
+        direction: 'long',
+        cross: 'long',
+        alignment: 'bull',
+        spreadPct: 0.01,
+        spreadAtr: 1,
+        medianSpreadPct: 0.01,
+        extended: false,
+        structureTarget: null,
+        label: '눌림목 재진입',
+        detail: '테스트 픽스처',
+      },
       indicators: {
         ema12: 100,
         sma20: 99,
@@ -230,6 +244,7 @@ describe('createPendingOrder', () => {
         atr14: 2,
         adx14: 25,
         volumeSma20: 1000,
+        stack: null,
       },
       ...over,
     };

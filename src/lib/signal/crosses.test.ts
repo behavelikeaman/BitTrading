@@ -14,6 +14,7 @@ function snap(ema12: number, sma20: number): IndicatorSnapshot {
     atr14: 1,
     adx14: 25,
     volumeSma20: 1000,
+    stack: null,
   };
 }
 

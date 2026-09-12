@@ -13,6 +13,7 @@ import { computeIndicators } from '@/lib/indicators';
 import { useLocalStorage } from '@/lib/use-local-storage';
 import { TIMEFRAMES, timeframeSpec, type Timeframe } from '@/lib/timeframe';
 import { TIME_ZONE_LABEL, formatTime } from '@/lib/format';
+import { SCORE_ITEM_COUNT } from '@/lib/signal/score';
 import type { AccountParamsResponse } from '@/app/api/account-params/route';
 import type { SignalResponse } from '@/app/api/signal/route';
 import type { Candle } from '@/types';
@@ -96,9 +97,12 @@ export default function Home() {
         notifyEnabled
       ) {
         const dir = signalData.signal.direction === 'long' ? '롱' : '숏';
-        new Notification(`${dir} 진입 조건 충족 (${signalData.signal.score}/8)`, {
-          body: `진입 ${signalData.lastPrice} · 손절 ${signalData.plan?.stopPrice.toFixed(1)}`,
-        });
+        new Notification(
+          `${dir} · ${signalData.signal.setup.label} (${signalData.signal.score}/${SCORE_ITEM_COUNT})`,
+          {
+            body: `진입 ${signalData.lastPrice} · 손절 ${signalData.plan?.stopPrice.toFixed(1)}`,
+          },
+        );
       }
       prevConviction.current = signalData.signal.conviction;
     } catch (e) {

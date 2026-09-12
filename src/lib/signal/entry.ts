@@ -1,4 +1,5 @@
 import type { Conviction, GuardState, Signal, SignalContext } from '@/types';
+import type { SetupResult } from '@/lib/signal/setup';
 import {
   DEFAULT_SCORE_CONFIG,
   scoreSignal,
@@ -6,9 +7,9 @@ import {
 } from '@/lib/signal/score';
 
 export interface EntryConfig extends ScoreConfig {
-  /** 확신 등급 최소 점수. 기본 6 */
+  /** 확신 등급 최소 점수 (10점 만점). 기본 7 */
   highConvictionScore: number;
-  /** 약간의 확신 최소 점수. 기본 4 */
+  /** 약간의 확신 최소 점수 (10점 만점). 기본 5 */
   mediumConvictionScore: number;
   /** ATR이 최근 평균의 이 배수를 넘으면 이상 변동성으로 본다. 기본 2.0 */
   atrSpikeMultiple: number;
@@ -22,8 +23,8 @@ export interface EntryConfig extends ScoreConfig {
 
 export const DEFAULT_ENTRY_CONFIG: EntryConfig = {
   ...DEFAULT_SCORE_CONFIG,
-  highConvictionScore: 6,
-  mediumConvictionScore: 4,
+  highConvictionScore: 7,
+  mediumConvictionScore: 5,
   atrSpikeMultiple: 2.0,
   consecutiveLossLimit: 3,
   dailyLossLimitPct: 0.06,
@@ -43,7 +44,7 @@ export function evaluateEntry(
   config?: Partial<EntryConfig>,
 ): Signal {
   const cfg = { ...DEFAULT_ENTRY_CONFIG, ...config };
-  const { direction, items, indicators, snapshots } = scoreSignal(ctx, cfg);
+  const { direction, items, indicators, snapshots, setup } = scoreSignal(ctx, cfg);
 
   const blockers: string[] = [];
 
@@ -78,7 +79,9 @@ export function evaluateEntry(
   }
 
   if (direction === null) {
-    blockers.push('진입 트리거 없음');
+    // 왜 진입하지 않는지가 이 화면의 핵심 정보다. "교차가 없다"와 "교차는
+    // 났지만 추격 자리라 들어가지 않는다"는 전혀 다른 상황이다.
+    blockers.push(blockerForSetup(setup));
   }
 
   const score = items.filter((i) => i.passed).length;
@@ -89,5 +92,12 @@ export function evaluateEntry(
     else if (score >= cfg.mediumConvictionScore) conviction = 'medium';
   }
 
-  return { direction, conviction, score, items, blockers, indicators };
+  return { direction, conviction, score, items, blockers, indicators, setup };
+}
+
+/** 셋업이 진입을 내지 않은 이유를 한 줄로 */
+function blockerForSetup(setup: SetupResult): string {
+  if (setup.kind === 'overextended-chase') return '과이격 추격 자리';
+  if (setup.cross === null) return '진입 트리거 없음';
+  return '셋업 조건 미충족';
 }

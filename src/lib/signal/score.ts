@@ -5,8 +5,14 @@ import type {
   SignalContext,
 } from '@/types';
 import { computeIndicators, ema } from '@/lib/indicators';
+import {
+  classifySetup,
+  DEFAULT_SETUP_CONFIG,
+  type SetupConfig,
+  type SetupResult,
+} from '@/lib/signal/setup';
 
-export interface ScoreConfig {
+export interface ScoreConfig extends SetupConfig {
   /** 신호봉 거래량 / 20봉 평균 거래량의 하한. 기본 1.5 */
   volumeMultiple: number;
   /** 추세 강도 하한. 기본 20 */
@@ -22,6 +28,7 @@ export interface ScoreConfig {
 }
 
 export const DEFAULT_SCORE_CONFIG: ScoreConfig = {
+  ...DEFAULT_SETUP_CONFIG,
   volumeMultiple: 1.5,
   adxMin: 20,
   fundingLimit: 0.0003,
@@ -33,12 +40,17 @@ export const DEFAULT_SCORE_CONFIG: ScoreConfig = {
 /** 상위 프레임 기울기 판정에 쓰는 EMA 기간 */
 const HTF_EMA_PERIOD = 50;
 
+/** 채점 항목 수. 화면과 확신도 임계값이 이 값을 기준으로 한다. */
+export const SCORE_ITEM_COUNT = 10;
+
 export interface ScoreResult {
   direction: Direction | null;
   items: ScoreItem[];
   indicators: IndicatorSnapshot | null;
   /** 지표 시계열. entry.ts가 변동성 이상치 판정에 쓴다. */
   snapshots: (IndicatorSnapshot | null)[];
+  /** 어떤 셋업인지. 같은 교차라도 배열·이격에 따라 의미가 다르다. */
+  setup: SetupResult;
 }
 
 function median(values: number[]): number {
@@ -52,11 +64,16 @@ function fmt(value: number, digits = 2): string {
 }
 
 /**
- * 8개 컨플루언스 항목을 채점한다.
+ * 10개 컨플루언스 항목을 **셋업 종류에 맞춰** 채점한다.
  *
- * emaCross가 필수 트리거다. 교차가 없으면 direction이 null이고, 방향에
- * 의존하는 항목(bbPosition, higherTimeframe, funding)은 "방향 미정"으로
- * 실패 처리된다. 나머지 항목은 그대로 채점해 화면에 현재 상태를 보여준다.
+ * 핵심은 같은 항목이라도 셋업마다 통과 조건이 다르다는 점이다. 예를 들어
+ * 가격 위치는 밴드 돌파 셋업에서 "밴드 밖"을 요구하지만, 과이격 되돌림에서는
+ * "중앙선을 반대로 이탈"을 요구한다. 하나의 조건으로 전부 재면, 실제로
+ * 수익이 난 되돌림·눌림목 셋업이 구조적으로 감점당한다 (ADR-022).
+ *
+ * emaCross가 여전히 필수 트리거지만, 방향은 교차가 아니라 셋업이 정한다.
+ * 정배열에서 하향 교차가 나면 교차 방향은 숏이고 셋업도 숏이지만, 이격이
+ * 벌어지지 않았다면 셋업은 진입을 내지 않는다.
  *
  * 확정봉만 사용한다 (ADR-006).
  */
@@ -71,8 +88,10 @@ export function scoreSignal(
   const snapshots = computeIndicators(closed5m);
   const lastIndex = snapshots.length - 1;
   const indicators = lastIndex >= 0 ? snapshots[lastIndex] : null;
-  const prev = lastIndex >= 1 ? snapshots[lastIndex - 1] : null;
   const lastCandle = lastIndex >= 0 ? closed5m[lastIndex] : null;
+
+  const setup = classifySetup(snapshots, lastIndex, cfg);
+  const direction = setup.direction;
 
   const items: ScoreItem[] = [];
   const push = (
@@ -84,46 +103,89 @@ export function scoreSignal(
     items.push({ key, label, passed, detail });
   };
 
-  // 1. emaCross — 필수 트리거. 방향을 결정한다.
-  let direction: Direction | null = null;
-  if (indicators === null || prev === null) {
-    push('emaCross', 'EMA12 × SMA20 교차', false, '데이터 부족');
-  } else {
-    const prevDiff = prev.ema12 - prev.sma20;
-    const currDiff = indicators.ema12 - indicators.sma20;
-    if (prevDiff <= 0 && currDiff > 0) direction = 'long';
-    else if (prevDiff >= 0 && currDiff < 0) direction = 'short';
+  // 1. emaCross — 필수 트리거
+  push(
+    'emaCross',
+    'EMA12 × BB중앙선 교차',
+    setup.cross !== null,
+    setup.cross !== null
+      ? `${setup.cross === 'long' ? '상향' : '하향'} 교차`
+      : setup.detail,
+  );
 
-    push(
-      'emaCross',
-      'EMA12 × SMA20 교차',
-      direction !== null,
-      direction !== null
-        ? `${direction === 'long' ? '상향' : '하향'} 교차 (이전 ${fmt(prevDiff)} → 현재 ${fmt(currDiff)})`
-        : `교차 없음 (이전 ${fmt(prevDiff)} → 현재 ${fmt(currDiff)})`,
-    );
-  }
+  // 2. stackAlignment — 이평선이 줄을 섰는가 (SMMA 20·55·95·135)
+  const alignText =
+    setup.alignment === 'bull'
+      ? '정배열 (20>55>95>135)'
+      : setup.alignment === 'bear'
+        ? '역배열 (20<55<95<135)'
+        : '혼조 — 추세 없음';
+  push('stackAlignment', '이평선 배열', setup.alignment !== 'mixed', alignText);
 
-  // 2. bbPosition — 방향 의존
+  // 3. stackSpread — 셋업이 요구하는 이격 상태인가
+  //    되돌림은 벌어져 있어야 하고, 눌림목·돌파는 벌어져 있으면 추격이다.
+  const spreadText =
+    setup.spreadPct === null
+      ? '스택 워밍업 중 (135봉 필요)'
+      : `이격 ${fmt(Math.abs(setup.spreadPct) * 100)}% vs 최근 중앙값 ${fmt(setup.medianSpreadPct * 100)}%`;
+  const spreadPassed =
+    setup.kind === 'overextended-reversion'
+      ? setup.extended
+      : setup.kind === 'trend-pullback' || setup.kind === 'band-breakout'
+        ? !setup.extended
+        : false;
+  push(
+    'stackSpread',
+    '이격 상태',
+    spreadPassed,
+    setup.kind === 'overextended-reversion'
+      ? `${spreadText} — 되돌림 근거`
+      : setup.kind === 'overextended-chase'
+        ? `${spreadText} — 이미 벌어져 추격 자리`
+        : spreadText,
+  );
+
+  // 4. bbPosition — 셋업마다 "좋은 위치"가 다르다
   if (indicators === null || lastCandle === null) {
-    push('bbPosition', 'BB 위치', false, '데이터 부족');
+    push('bbPosition', '가격 위치', false, '데이터 부족');
   } else if (direction === null) {
-    push('bbPosition', 'BB 위치', false, '방향 미정');
+    push('bbPosition', '가격 위치', false, '진입 셋업 없음');
   } else {
     const close = lastCandle.close;
-    const passed =
-      direction === 'long' ? close > indicators.bbUpper : close < indicators.bbLower;
-    push(
-      'bbPosition',
-      'BB 위치',
-      passed,
-      direction === 'long'
-        ? `종가 ${fmt(close)} vs 상단 ${fmt(indicators.bbUpper)}`
-        : `종가 ${fmt(close)} vs 하단 ${fmt(indicators.bbLower)}`,
-    );
+    const isLong = direction === 'long';
+    if (setup.kind === 'band-breakout') {
+      const passed = isLong ? close > indicators.bbUpper : close < indicators.bbLower;
+      push(
+        'bbPosition',
+        '가격 위치',
+        passed,
+        isLong
+          ? `종가 ${fmt(close)} vs BB상단 ${fmt(indicators.bbUpper)} (돌파 필요)`
+          : `종가 ${fmt(close)} vs BB하단 ${fmt(indicators.bbLower)} (돌파 필요)`,
+      );
+    } else if (setup.kind === 'trend-pullback' && indicators.stack !== null) {
+      // 눌림에서 실제로 회복했는가 — 빠른 선(SMMA20)을 되찾았는지로 본다.
+      const fast = indicators.stack.smma20;
+      const passed = isLong ? close > fast : close < fast;
+      push(
+        'bbPosition',
+        '가격 위치',
+        passed,
+        `종가 ${fmt(close)} vs SMMA20 ${fmt(fast)} (눌림 회복 확인)`,
+      );
+    } else {
+      // 과이격 되돌림 — 중앙선을 반대쪽으로 이탈했는가
+      const passed = isLong ? close > indicators.sma20 : close < indicators.sma20;
+      push(
+        'bbPosition',
+        '가격 위치',
+        passed,
+        `종가 ${fmt(close)} vs BB중앙선 ${fmt(indicators.sma20)} (반대 이탈 확인)`,
+      );
+    }
   }
 
-  // 3. bandExpansion — 스퀴즈 구간 진입 차단
+  // 5. bandExpansion — 스퀴즈 구간 진입 차단
   const widthHistory: number[] = [];
   for (let i = lastIndex - cfg.bbWidthLookback; i < lastIndex; i++) {
     const s = i >= 0 ? snapshots[i] : null;
@@ -141,7 +203,7 @@ export function scoreSignal(
     );
   }
 
-  // 4. volume
+  // 6. volume
   if (indicators === null || lastCandle === null) {
     push('volume', '거래량', false, '데이터 부족');
   } else {
@@ -154,7 +216,10 @@ export function scoreSignal(
     );
   }
 
-  // 5. higherTimeframe — 방향 의존
+  // 7. higherTimeframe — 되돌림 셋업에서는 기준이 뒤집힌다.
+  //    되돌림은 상위 추세가 살아 있어야 스택 하단에서 멈출 근거가 생긴다.
+  //    상위 추세까지 꺾였다면 그건 되돌림이 아니라 추세 전환이고, 목표가
+  //    스택 하단에서 지지받는다는 전제가 사라진다.
   const htfCloses = closed15m.map((c) => c.close);
   const htfEma = ema(htfCloses, HTF_EMA_PERIOD);
   const htfLast = htfEma[htfEma.length - 1] ?? null;
@@ -162,19 +227,26 @@ export function scoreSignal(
   if (htfLast === null || htfPrev === null) {
     push('higherTimeframe', '상위 프레임 정렬', false, '15분봉 데이터 부족');
   } else if (direction === null) {
-    push('higherTimeframe', '상위 프레임 정렬', false, '방향 미정');
+    push('higherTimeframe', '상위 프레임 정렬', false, '진입 셋업 없음');
   } else {
     const slope = htfLast - htfPrev;
-    const passed = direction === 'long' ? slope > 0 : slope < 0;
-    push(
-      'higherTimeframe',
-      '상위 프레임 정렬',
-      passed,
-      `15분 EMA50 기울기 ${slope > 0 ? '+' : ''}${fmt(slope, 3)}`,
-    );
+    const slopeText = `15분 EMA50 기울기 ${slope > 0 ? '+' : ''}${fmt(slope, 3)}`;
+    if (setup.kind === 'overextended-reversion') {
+      const trendUp = setup.alignment === 'bull';
+      const passed = trendUp ? slope > 0 : slope < 0;
+      push(
+        'higherTimeframe',
+        '상위 프레임 정렬',
+        passed,
+        `${slopeText} — 상위 추세 유지 여부 (되돌림의 전제)`,
+      );
+    } else {
+      const passed = direction === 'long' ? slope > 0 : slope < 0;
+      push('higherTimeframe', '상위 프레임 정렬', passed, slopeText);
+    }
   }
 
-  // 6. trendStrength
+  // 8. trendStrength
   if (indicators === null) {
     push('trendStrength', '추세 강도', false, '데이터 부족');
   } else {
@@ -186,9 +258,9 @@ export function scoreSignal(
     );
   }
 
-  // 7. funding — 방향 의존. 과열된 쪽으로 따라 들어가는 것을 막는다.
+  // 9. funding — 방향 의존. 과열된 쪽으로 따라 들어가는 것을 막는다.
   if (direction === null) {
-    push('funding', '펀딩비', false, '방향 미정');
+    push('funding', '펀딩비', false, '진입 셋업 없음');
   } else {
     const passed =
       direction === 'long'
@@ -202,7 +274,7 @@ export function scoreSignal(
     );
   }
 
-  // 8. session
+  // 10. session
   // 판정은 UTC 창으로 한다(설정이 UTC 기준). 설명에는 화면의 다른 시각과
   // 맞추기 위해 KST를 먼저 적는다.
   const hour = new Date(ctx.nowMs).getUTCHours();
@@ -214,5 +286,5 @@ export function scoreSignal(
     `KST ${kstHour}시 (UTC ${hour}시) vs UTC ${cfg.sessionStartUtcHour}~${cfg.sessionEndUtcHour}시`,
   );
 
-  return { direction, items, indicators, snapshots };
+  return { direction, items, indicators, snapshots, setup };
 }

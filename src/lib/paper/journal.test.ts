@@ -15,6 +15,7 @@ function trade(netPnl: number): Trade {
     direction: 'long',
     conviction: 'high',
     score: 8,
+    setup: 'trend-pullback',
     legs: [],
     averageEntryPrice: 100,
     exitPrice: 101,

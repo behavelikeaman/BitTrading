@@ -1,6 +1,7 @@
 'use client';
 
 import type { ScoreItem } from '@/types';
+import { SCORE_ITEM_COUNT } from '@/lib/signal/score';
 
 interface Props {
   items: ScoreItem[];
@@ -17,7 +18,9 @@ export function ScoreBreakdown({ items, score }: Props) {
     <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-neutral-300">컨플루언스 점수</h2>
-        <span className="text-lg font-bold">{score}/8</span>
+        <span className="text-lg font-bold tabular-nums">
+          {score}/{SCORE_ITEM_COUNT}
+        </span>
       </div>
       <table className="w-full text-sm [&_td]:px-2 [&_th]:px-2">
         <tbody>
