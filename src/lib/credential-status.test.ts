@@ -79,6 +79,22 @@ describe('describeCredentials — 왜 실측이 안 되는지 알려준다', () 
     expect(s.message).toContain('따옴표');
   });
 
+  it('파라미터 오류는 자격증명 문제가 아니라 앱 버그로 구분한다', () => {
+    // code 51(instType 누락)처럼 인증을 통과한 뒤 나는 오류를 "키를 확인하라"고
+    // 안내하면, 멀쩡한 키를 계속 의심하게 된다. 인증은 이미 통과한 상태다.
+    const s = describeCredentials(
+      facts({
+        httpStatus: 400,
+        exchangeCode: '51',
+        exchangeMessage: 'The instType field is required.',
+      }),
+    );
+    expect(s.ok).toBe(false);
+    expect(s.reason).toBe('request-error');
+    expect(s.message).toContain('인증은 통과');
+    expect(s.message).toContain('instType');
+  });
+
   it('패스프레이즈가 있는데 거부당하면 다른 원인을 가리킨다', () => {
     const s = describeCredentials(facts({ httpStatus: 401, exchangeCode: null }));
     expect(s.reason).toBe('rejected');

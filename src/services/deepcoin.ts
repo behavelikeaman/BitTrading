@@ -173,13 +173,21 @@ export async function fetchStepMargin(
   }
 }
 
+/**
+ * 비공개 엔드포인트가 요구하는 상품 구분. BTC-USDT 무기한은 SWAP이다.
+ *
+ * 빠뜨리면 거래소가 `code 51: The instType field is required.`로 거부한다.
+ * 허용값은 SPOT·SWAP 두 가지다 (거래소 오류 메시지로 확인).
+ */
+const INST_TYPE = 'SWAP';
+
 /** 실제 수수료율 (ADR-012). 키가 없으면 null이고 호출부는 기본값을 쓴다. */
 export async function fetchTradeFee(
   instId = DEFAULT_INST_ID,
 ): Promise<{ maker: number; taker: number } | null> {
   const data = await getPrivate<{ maker?: string; taker?: string }>(
     'deepcoin/account/trade-fee',
-    { instId },
+    { instType: INST_TYPE, instId },
   );
   if (data === null) return null;
   // Deepcoin은 수수료를 음수로 주는 경우가 있어 절대값으로 정규화한다.
@@ -197,6 +205,7 @@ export async function fetchFills(input: {
   const data = await getPrivate<
     { ts?: string; side?: string; fillPx?: string; fillSz?: string }[]
   >('deepcoin/trade/fills', {
+    instType: INST_TYPE,
     instId: input.instId ?? DEFAULT_INST_ID,
     limit: String(input.limit ?? 100),
   });
@@ -240,7 +249,10 @@ export async function checkCredentials(
 
   if (!hasApiKey || !hasSecret) return describeCredentials(base);
 
-  const requestPath = buildPath('deepcoin/account/trade-fee', { instId });
+  const requestPath = buildPath('deepcoin/account/trade-fee', {
+    instType: INST_TYPE,
+    instId,
+  });
   const headers = signedHeaders('GET', requestPath);
   if (headers === null) return describeCredentials(base);
 

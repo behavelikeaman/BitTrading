@@ -14,6 +14,7 @@ export type CredentialReason =
   | 'incomplete'
   | 'network'
   | 'rejected'
+  | 'request-error'
   | 'exchange-error';
 
 /**
@@ -101,16 +102,34 @@ export function describeCredentials(facts: CredentialStatusInput): CredentialSta
 
   const status = facts.httpStatus;
   const code = facts.exchangeCode;
-  const rejected =
-    status === 401 || status === 403 || (code !== null && code !== '0');
+  const message = facts.exchangeMessage ?? '';
+
+  // 인증 실패로 볼 수 있는 것만 자격증명 문제로 다룬다. 그 밖의 오류 코드는
+  // **인증을 통과한 뒤** 난 것이므로 키가 아니라 우리 요청이 잘못된 것이다.
+  // 예: code 51 (instType 누락). 이걸 "키를 확인하라"고 안내하면 멀쩡한
+  // 키를 계속 의심하게 된다.
+  const AUTH_CODES = ['50104', '50105', '50113'];
+  const authRejected =
+    status === 401 ||
+    status === 403 ||
+    (code !== null && AUTH_CODES.includes(code)) ||
+    /PASSPHRASE|SIGN|API ?KEY/i.test(message);
+
+  if (!authRejected && code !== null && code !== '0') {
+    return {
+      ok: false,
+      reason: 'request-error',
+      message: `인증은 통과했는데 거래소가 요청 형식을 거부했다 (code ${code}: ${message || '메시지 없음'}). 키 문제가 아니라 앱이 보내는 파라미터 문제다.`,
+    };
+  }
+
+  const rejected = authRejected;
 
   if (rejected) {
     const length = facts.passphraseLength;
     // 거래소가 "패스프레이즈가 틀렸다"고 말하면 값 자체가 어긋난 것이다.
     // 서명 오류(50113)와 구분되므로 원인을 좁혀 안내할 수 있다.
-    const wrongPassphrase =
-      code === '50105' ||
-      (facts.exchangeMessage ?? '').toUpperCase().includes('PASSPHRASE');
+    const wrongPassphrase = code === '50105' || /PASSPHRASE/i.test(message);
     if (wrongPassphrase && hasPassphrase) {
       const lengthText = length === undefined ? '' : ` 지금 ${length}자를 보냈다.`;
       return {
@@ -121,7 +140,7 @@ export function describeCredentials(facts: CredentialStatusInput): CredentialSta
     }
     const detail =
       code !== null && code !== '0'
-        ? `code ${code}: ${facts.exchangeMessage ?? '메시지 없음'}`
+        ? `code ${code}: ${message || '메시지 없음'}`
         : `HTTP ${status}`;
     // 패스프레이즈가 비어 있는 채로 거부당했다면 그것이 가장 유력한 원인이다.
     return hasPassphrase
