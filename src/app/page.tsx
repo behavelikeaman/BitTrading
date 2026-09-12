@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { CandleChart } from '@/components/CandleChart';
 import { CostBadge } from '@/components/CostBadge';
 import { OrderTicket } from '@/components/OrderTicket';
@@ -164,6 +165,8 @@ export default function Home() {
           </p>
         </div>
         <div className="flex items-center gap-3 text-xs text-neutral-500">
+          <Link href="/backtest" className="hover:text-neutral-300">백테스트</Link>
+          <Link href="/paper" className="hover:text-neutral-300">페이퍼</Link>
           {data && <span>갱신 {formatTime(data.updatedAt)}</span>}
           {!notifyEnabled && (
             <button

@@ -179,9 +179,10 @@ export default function BacktestPage() {
             이 규칙이 과거에 실제로 돈이 됐는지 확인한다
           </p>
         </div>
-        <Link href="/" className="text-xs text-neutral-400 hover:text-neutral-200">
-          ← 대시보드
-        </Link>
+        <nav className="flex gap-3 text-xs text-neutral-400">
+          <Link href="/" className="hover:text-neutral-200">대시보드</Link>
+          <Link href="/paper" className="hover:text-neutral-200">페이퍼</Link>
+        </nav>
       </header>
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
