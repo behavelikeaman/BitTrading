@@ -223,12 +223,15 @@ export async function checkCredentials(
 ): Promise<CredentialStatus> {
   const hasApiKey = Boolean(process.env.DEEPCOIN_API_KEY);
   const hasSecret = Boolean(process.env.DEEPCOIN_API_SECRET);
-  const hasPassphrase = Boolean(process.env.DEEPCOIN_API_PASSPHRASE);
+  const passphrase = process.env.DEEPCOIN_API_PASSPHRASE ?? '';
+  const hasPassphrase = passphrase.length > 0;
 
   const base = {
     hasApiKey,
     hasSecret,
     hasPassphrase,
+    // 길이만 넘긴다. 값은 어떤 경로로도 화면·로그에 나가면 안 된다.
+    passphraseLength: passphrase.length,
     httpStatus: null as number | null,
     exchangeCode: null as string | null,
     exchangeMessage: null as string | null,

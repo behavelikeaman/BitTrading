@@ -35,6 +35,13 @@ export interface CredentialStatusInput {
   exchangeMessage: string | null;
   /** fetch 자체가 실패했는가 (DNS·차단·타임아웃) */
   networkError: boolean;
+  /**
+   * 전송한 패스프레이즈의 길이. **값은 절대 담지 않는다.**
+   *
+   * 길이만으로도 따옴표가 붙었는지, 공백이 섞였는지, 아예 빈 값인지를
+   * 사용자가 바로 알아챌 수 있다.
+   */
+  passphraseLength?: number;
 }
 
 /** @deprecated 이름만 남긴 별칭 */
@@ -98,6 +105,20 @@ export function describeCredentials(facts: CredentialStatusInput): CredentialSta
     status === 401 || status === 403 || (code !== null && code !== '0');
 
   if (rejected) {
+    const length = facts.passphraseLength;
+    // 거래소가 "패스프레이즈가 틀렸다"고 말하면 값 자체가 어긋난 것이다.
+    // 서명 오류(50113)와 구분되므로 원인을 좁혀 안내할 수 있다.
+    const wrongPassphrase =
+      code === '50105' ||
+      (facts.exchangeMessage ?? '').toUpperCase().includes('PASSPHRASE');
+    if (wrongPassphrase && hasPassphrase) {
+      const lengthText = length === undefined ? '' : ` 지금 ${length}자를 보냈다.`;
+      return {
+        ok: false,
+        reason: 'rejected',
+        message: `거래소가 패스프레이즈를 거부했다 (code ${code ?? facts.httpStatus}).${lengthText} .env.local에 따옴표나 앞뒤 공백이 섞이지 않았는지, 키를 만들 때 Password 칸에 넣은 값과 같은지 확인하라.`,
+      };
+    }
     const detail =
       code !== null && code !== '0'
         ? `code ${code}: ${facts.exchangeMessage ?? '메시지 없음'}`

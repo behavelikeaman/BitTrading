@@ -200,18 +200,8 @@ export function classifySetup(
   const spreadPct = spreadInPct(curr);
   const spreadAtr = spreadInAtr(curr);
 
-  if (cross === null) {
-    return result({
-      kind: 'none',
-      alignment,
-      stackReady: true,
-      spreadPct,
-      spreadAtr,
-      detail: `EMA12 × BB중앙선 교차 없음 (${fmt(prevDiff)} → ${fmt(currDiff)})`,
-    });
-  }
-
-  // 이격이 "지금 벌어진 것"인지 "원래 이 정도인지"를 최근 분포와 비교한다.
+  // 이격 통계는 교차 여부와 무관하게 낸다. 교차가 없는 봉에서 통계를
+  // 비워두면 화면에 "표본 0봉"이 찍혀 실제로 표본이 없는 것처럼 보인다.
   const historyValues: number[] = [];
   for (let i = index - cfg.spreadLookback; i < index; i++) {
     const s = i >= 0 ? snapshots[i] : null;
@@ -229,6 +219,19 @@ export function classifySetup(
     spreadPct !== null &&
     absSpread >= cfg.extendedMinPct &&
     absSpread >= medianSpread * cfg.extendedMedianMultiple;
+
+  if (cross === null) {
+    return result({
+      kind: 'none',
+      alignment,
+      stackReady: true,
+      spreadPct,
+      spreadAtr,
+      medianSpreadPct: medianSpread,
+      spreadSampleCount: samples,
+      detail: `EMA12 × BB중앙선 교차 없음 (${fmt(prevDiff)} → ${fmt(currDiff)})`,
+    });
+  }
 
   const spreadText = enoughSamples
     ? `이격 ${fmt(absSpread * 100, 2)}% (최근 중앙값 ${fmt(medianSpread * 100, 2)}%, 표본 ${samples})`

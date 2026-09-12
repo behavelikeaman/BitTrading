@@ -149,6 +149,21 @@ describe('classifySetup — 배열과 이격이 교차의 의미를 바꾼다', 
     expect(setup.alignment).toBe('mixed');
   });
 
+  it('교차가 없어도 이격 통계는 보고한다', () => {
+    // 통계를 비워두면 화면에 "표본 0봉 / 중앙값 0.00%"가 찍혀 실제로 표본이
+    // 없는 것처럼 보인다. 판정과 표시는 다른 문제다.
+    const snaps = [
+      ...history(20),
+      snap({ ema12: 1001, sma20: 1000, spread: 20 }),
+      snap({ ema12: 1002, sma20: 1000, spread: 20 }),
+    ];
+    const setup = classifySetup(snaps, snaps.length - 1);
+    expect(setup.kind).toBe('none');
+    expect(setup.cross).toBeNull();
+    expect(setup.spreadSampleCount).toBeGreaterThan(50);
+    expect(setup.medianSpreadPct).toBeGreaterThan(0);
+  });
+
   it('교차가 없으면 셋업이 없다', () => {
     const snaps = [
       ...history(20),

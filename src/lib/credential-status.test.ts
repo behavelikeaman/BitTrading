@@ -6,6 +6,7 @@ function facts(over: Partial<CredentialFacts> = {}): CredentialFacts {
     hasApiKey: true,
     hasSecret: true,
     hasPassphrase: true,
+    passphraseLength: 12,
     httpStatus: 200,
     exchangeCode: '0',
     exchangeMessage: null,
@@ -60,6 +61,22 @@ describe('describeCredentials — 왜 실측이 안 되는지 알려준다', () 
     expect(s.reason).toBe('missing-passphrase');
     expect(s.message).toContain('새로 만들');
     expect(s.message).toContain('50104');
+  });
+
+  it('패스프레이즈가 틀렸다고 하면 길이를 알려준다', () => {
+    // 값 자체는 절대 보여주지 않는다. 길이만으로도 따옴표·공백이 섞였는지
+    // 사용자가 바로 알아챌 수 있다.
+    const s = describeCredentials(
+      facts({
+        httpStatus: 400,
+        exchangeCode: '50105',
+        exchangeMessage: "Request header 'DC-ACCESS-PASSPHRASE' incorrect.",
+        passphraseLength: 14,
+      }),
+    );
+    expect(s.reason).toBe('rejected');
+    expect(s.message).toContain('14자');
+    expect(s.message).toContain('따옴표');
   });
 
   it('패스프레이즈가 있는데 거부당하면 다른 원인을 가리킨다', () => {
