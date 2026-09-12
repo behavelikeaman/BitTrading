@@ -35,12 +35,14 @@ function Row({
         : tone === 'warn'
           ? 'text-[var(--color-warn)]'
           : tone === 'muted'
-            ? 'text-neutral-500'
+            ? 'text-neutral-400'
             : '';
   return (
     <div className="flex items-baseline justify-between gap-4 py-1">
-      <span className="text-xs text-neutral-400">{label}</span>
-      <span className={`${big ? 'text-lg font-semibold' : 'text-sm'} ${color}`}>
+      <span className="text-sm text-neutral-300">{label}</span>
+      <span
+        className={`tabular-nums ${big ? 'text-lg font-semibold' : 'text-sm font-medium'} ${color}`}
+      >
         {value}
       </span>
     </div>

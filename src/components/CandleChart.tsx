@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import {
   CandlestickSeries,
   LineSeries,
+  TickMarkType,
   createChart,
   createSeriesMarkers,
   type IChartApi,
@@ -13,6 +14,12 @@ import {
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
+import {
+  formatDateShort,
+  formatDateTime,
+  formatHourMinute,
+  formatYear,
+} from '@/lib/format';
 import { findCrosses } from '@/lib/signal/crosses';
 import type { Candle, IndicatorSnapshot, PositionPlan } from '@/types';
 
@@ -36,6 +43,15 @@ function toTime(ms: number): UTCTimestamp {
 }
 
 /**
+ * lightweight-charts는 시각을 UTC로 그린다. 데이터는 진짜 UTC epoch 그대로
+ * 두고(시각을 밀면 크로스헤어·툴팁과 실제 봉 시각이 어긋난다) 라벨만 KST로
+ * 환산한다.
+ */
+function toMs(time: Time): number {
+  return (time as UTCTimestamp) * 1000;
+}
+
+/**
  * 5분봉 + 볼린저 밴드 + EMA12, 계획가를 수평선으로 표시한다.
  *
  * lightweight-charts v5는 addCandlestickSeries가 아니라
@@ -50,6 +66,8 @@ export function CandleChart({ candles, snapshots, plan }: Props) {
   const lowerRef = useRef<ISeriesApi<'Line', Time> | null>(null);
   const emaRef = useRef<ISeriesApi<'Line', Time> | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  /** fitContent를 다시 불러야 하는지 판단하는 기준(봉 간격). 0이면 아직 안 맞췄다. */
+  const fittedSpacingRef = useRef(0);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -66,13 +84,49 @@ export function CandleChart({ candles, snapshots, plan }: Props) {
         horzLines: { color: '#1f2937' },
       },
       rightPriceScale: { borderColor: '#1f2937' },
+      // 툴팁·크로스헤어의 시각도 KST로 맞춘다.
+      localization: {
+        timeFormatter: (time: Time) => formatDateTime(toMs(time)),
+      },
       timeScale: {
         borderColor: '#1f2937',
         timeVisible: true,
         // 마지막 봉을 오른쪽 끝에 붙이면 최신 신호 삼각형이 잘린다.
         // 가장 중요한 마커가 안 보이는 것이므로 여백을 둔다.
         rightOffset: 6,
+        // 창 크기를 바꿔도 보이는 구간을 유지한다. 끄면 리사이즈마다
+        // 구간이 바뀌어 화면이 튄다.
+        lockVisibleTimeRangeOnResize: true,
+        rightBarStaysOnScroll: true,
+        barSpacing: 8,
+        minBarSpacing: 1,
+        tickMarkFormatter: (time: Time, tickMarkType: TickMarkType) => {
+          const ms = toMs(time);
+          switch (tickMarkType) {
+            case TickMarkType.Year:
+              return formatYear(ms);
+            case TickMarkType.Month:
+            case TickMarkType.DayOfMonth:
+              return formatDateShort(ms);
+            default:
+              return formatHourMinute(ms);
+          }
+        },
       },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false,
+      },
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: true,
+        axisDoubleClickReset: true,
+      },
+      // 관성 스크롤. 드래그를 놓을 때 뚝 끊기지 않는다.
+      kineticScroll: { mouse: true, touch: true },
       height: 360,
       autoSize: true,
     });
@@ -107,6 +161,7 @@ export function CandleChart({ candles, snapshots, plan }: Props) {
     return () => {
       chart.remove();
       chartRef.current = null;
+      fittedSpacingRef.current = 0;
     };
   }, []);
 
@@ -149,11 +204,17 @@ export function CandleChart({ candles, snapshots, plan }: Props) {
     }));
     markersRef.current?.setMarkers(markers);
 
-    // 호출하지 않으면 캔들이 오른쪽 끝에만 몰리고 왼쪽이 비어 보인다.
-    // fitContent는 rightOffset을 덮어쓰므로 스크롤로 여백을 되돌린다.
-    const timeScale = chartRef.current?.timeScale();
-    timeScale?.fitContent();
-    timeScale?.scrollToPosition(6, false);
+    // 첫 데이터와 타임프레임 전환에서만 전체를 맞춘다. 폴링마다 fitContent를
+    // 부르면 사용자가 확대·이동해둔 구간이 갱신 때마다 원위치로 튕긴다.
+    const spacing =
+      candles.length > 1 ? candles[1]!.openTime - candles[0]!.openTime : 0;
+    if (spacing !== fittedSpacingRef.current) {
+      const timeScale = chartRef.current?.timeScale();
+      timeScale?.fitContent();
+      // fitContent는 rightOffset을 덮어쓰므로 스크롤로 여백을 되돌린다.
+      timeScale?.scrollToPosition(6, false);
+      fittedSpacingRef.current = spacing;
+    }
   }, [candles, snapshots]);
 
   useEffect(() => {

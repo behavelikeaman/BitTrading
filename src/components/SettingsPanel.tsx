@@ -59,7 +59,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-[10px] uppercase tracking-wide text-neutral-500">
+      <span className="text-xs font-medium text-neutral-400">
         {label}
       </span>
       <div className="flex items-center gap-1">
@@ -74,7 +74,7 @@ function Field({
           className="w-full rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-sm text-neutral-200"
         />
         {suffix !== undefined && (
-          <span className="shrink-0 text-xs text-neutral-500">{suffix}</span>
+          <span className="shrink-0 text-xs text-neutral-400">{suffix}</span>
         )}
       </div>
     </label>
@@ -118,10 +118,10 @@ export function SettingsPanel({
         <Field label="목표 R배수" value={settings.targetRMultiple} step={0.01} onChange={set('targetRMultiple')} />
       </div>
 
-      <p className="mt-2 text-xs text-neutral-500">
+      <p className="mt-2 text-xs text-neutral-400">
         목표 {settings.targetRMultiple}R ={' '}
         {onMargin === null ? (
-          <span className="text-neutral-600">증거금 대비 환산 대기 (ATR 필요)</span>
+          <span className="text-neutral-500">증거금 대비 환산 대기 (ATR 필요)</span>
         ) : (
           <>
             증거금 대비 순수익{' '}

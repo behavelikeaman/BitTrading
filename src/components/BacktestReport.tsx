@@ -2,6 +2,7 @@
 
 import type { BacktestResult } from '@/types';
 import {
+  TIME_ZONE_LABEL,
   formatDateTime,
   formatPct,
   formatProfitFactor,
@@ -38,10 +39,10 @@ function Stat({
           : 'text-neutral-200';
   return (
     <div className="rounded border border-neutral-800 bg-neutral-900/40 p-2">
-      <div className="text-[10px] uppercase tracking-wide text-neutral-500">{label}</div>
+      <div className="text-xs font-medium text-neutral-400">{label}</div>
       <div className={`text-base font-semibold ${color}`}>{value}</div>
       {hint !== undefined && (
-        <div className="mt-0.5 text-[10px] text-neutral-600">{hint}</div>
+        <div className="mt-0.5 text-[11px] text-neutral-500">{hint}</div>
       )}
     </div>
   );
@@ -78,14 +79,14 @@ export function BacktestReport({ result, breakEvenWinRate, startingEquity }: Pro
         </h2>
         <div className="flex flex-wrap items-baseline gap-6">
           <div>
-            <div className="text-[10px] uppercase tracking-wide text-neutral-500">
+            <div className="text-xs font-medium text-neutral-400">
               실제 승률
             </div>
             <div className="text-3xl font-bold">{formatPct(result.winRate)}</div>
           </div>
-          <div className="text-2xl text-neutral-600">vs</div>
+          <div className="text-2xl text-neutral-500">vs</div>
           <div>
-            <div className="text-[10px] uppercase tracking-wide text-neutral-500">
+            <div className="text-xs font-medium text-neutral-400">
               손익분기 승률
             </div>
             <div className="text-3xl font-bold text-neutral-400">
@@ -159,9 +160,9 @@ export function BacktestReport({ result, breakEvenWinRate, startingEquity }: Pro
         </h2>
         <div className="max-h-96 overflow-auto">
           <table className="w-full text-xs [&_td]:px-2 [&_th]:px-2">
-            <thead className="sticky top-0 bg-neutral-950 text-neutral-500">
+            <thead className="sticky top-0 bg-neutral-950 text-neutral-400">
               <tr>
-                <th className="py-1 text-left">진입</th>
+                <th className="py-1 text-left">진입 ({TIME_ZONE_LABEL})</th>
                 <th className="py-1 text-left">방향</th>
                 <th className="py-1 text-right">점수</th>
                 <th className="py-1 text-right">평단</th>
@@ -173,7 +174,9 @@ export function BacktestReport({ result, breakEvenWinRate, startingEquity }: Pro
             <tbody>
               {result.trades.map((t, i) => (
                 <tr key={`${t.entryTime}-${i}`} className="border-t border-neutral-900">
-                  <td className="py-1 text-neutral-400">{formatDateTime(t.entryTime)}</td>
+                  <td className="py-1 tabular-nums text-neutral-400">
+                    {formatDateTime(t.entryTime)}
+                  </td>
                   <td
                     className={
                       t.direction === 'long'

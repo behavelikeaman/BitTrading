@@ -1,7 +1,13 @@
 'use client';
 
 import type { IndicatorSnapshot } from '@/types';
-import { formatPct, formatPrice, formatRate, formatTime } from '@/lib/format';
+import {
+  TIME_ZONE_LABEL,
+  formatPct,
+  formatPrice,
+  formatRate,
+  formatTime,
+} from '@/lib/format';
 
 interface Props {
   indicators: IndicatorSnapshot | null;
@@ -13,10 +19,10 @@ interface Props {
 function Cell({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wide text-neutral-500">
-        {label}
+      <div className="text-xs font-medium text-neutral-400">{label}</div>
+      <div className="text-base font-semibold tabular-nums text-neutral-100">
+        {value}
       </div>
-      <div className="text-sm text-neutral-200">{value}</div>
     </div>
   );
 }
@@ -32,13 +38,13 @@ export function SignalPanel({
     <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="text-sm font-semibold text-neutral-300">지표</h2>
-        <span className="text-xs text-neutral-500">
-          확정봉 {formatTime(lastClosedAt)} 기준
+        <span className="text-xs text-neutral-400">
+          확정봉 {formatTime(lastClosedAt)} {TIME_ZONE_LABEL} 기준
         </span>
       </div>
 
       {indicators === null ? (
-        <p className="text-sm text-neutral-500">데이터가 모자라 지표를 낼 수 없다</p>
+        <p className="text-sm text-neutral-400">데이터가 모자라 지표를 낼 수 없다</p>
       ) : (
         <div className="grid grid-cols-3 gap-3">
           <Cell label="종가" value={formatPrice(lastPrice)} />

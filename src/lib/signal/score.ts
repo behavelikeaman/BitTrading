@@ -203,12 +203,15 @@ export function scoreSignal(
   }
 
   // 8. session
+  // 판정은 UTC 창으로 한다(설정이 UTC 기준). 설명에는 화면의 다른 시각과
+  // 맞추기 위해 KST를 먼저 적는다.
   const hour = new Date(ctx.nowMs).getUTCHours();
+  const kstHour = (hour + 9) % 24;
   push(
     'session',
     '세션',
     hour >= cfg.sessionStartUtcHour && hour < cfg.sessionEndUtcHour,
-    `UTC ${hour}시 vs ${cfg.sessionStartUtcHour}~${cfg.sessionEndUtcHour}시`,
+    `KST ${kstHour}시 (UTC ${hour}시) vs UTC ${cfg.sessionStartUtcHour}~${cfg.sessionEndUtcHour}시`,
   );
 
   return { direction, items, indicators, snapshots };

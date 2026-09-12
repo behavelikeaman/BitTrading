@@ -4,10 +4,12 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { winRateInterval } from '@/lib/paper/confidence';
 import {
+  TIME_ZONE_LABEL,
   formatDateTime,
   formatPct,
   formatPrice,
   formatProfitFactor,
+  formatSignedPct,
   formatSignedUsd,
   formatUsd,
 } from '@/lib/format';
@@ -39,10 +41,10 @@ function Stat({
           : 'text-neutral-200';
   return (
     <div className="rounded border border-neutral-800 bg-neutral-900/40 p-2">
-      <div className="text-[10px] uppercase tracking-wide text-neutral-500">{label}</div>
-      <div className={`text-base font-semibold ${color}`}>{value}</div>
+      <div className="text-xs font-medium text-neutral-400">{label}</div>
+      <div className={`text-base font-semibold tabular-nums ${color}`}>{value}</div>
       {hint !== undefined && (
-        <div className="mt-0.5 text-[10px] text-neutral-600">{hint}</div>
+        <div className="mt-0.5 text-[11px] text-neutral-500">{hint}</div>
       )}
     </div>
   );
@@ -282,10 +284,10 @@ export default function PaperPage() {
                 ) : (
                   <div className="mt-3 max-h-64 overflow-auto">
                     <table className="w-full text-xs [&_td]:px-2 [&_th]:px-2">
-                      <thead className="sticky top-0 bg-neutral-950 text-neutral-500">
+                      <thead className="sticky top-0 bg-neutral-950 text-neutral-400">
                         <tr>
                           <th className="py-1 text-left">종류</th>
-                          <th className="py-1 text-left">시각</th>
+                          <th className="py-1 text-left">시각 ({TIME_ZONE_LABEL})</th>
                           <th className="py-1 text-left">페이퍼</th>
                           <th className="py-1 text-left">백테스트</th>
                         </tr>
@@ -294,7 +296,7 @@ export default function PaperPage() {
                         {divergence.divergences.map((d, i) => (
                           <tr key={`${d.at}-${d.kind}-${i}`} className="border-t border-neutral-900">
                             <td className="py-1 text-[var(--color-short)]">{d.kind}</td>
-                            <td className="text-neutral-400">{formatDateTime(d.at)}</td>
+                            <td className="tabular-nums text-neutral-400">{formatDateTime(d.at)}</td>
                             <td className="text-neutral-300">{d.paper}</td>
                             <td className="text-neutral-300">{d.backtest}</td>
                           </tr>
@@ -369,20 +371,22 @@ export default function PaperPage() {
             </div>
             <div className="max-h-96 overflow-auto">
               <table className="w-full text-xs [&_td]:px-2 [&_th]:px-2">
-                <thead className="sticky top-0 bg-neutral-950 text-neutral-500">
+                <thead className="sticky top-0 bg-neutral-950 text-neutral-400">
                   <tr>
-                    <th className="py-1 text-left">시각</th>
+                    <th className="py-1 text-left">시각 ({TIME_ZONE_LABEL})</th>
                     <th className="py-1 text-left">유형</th>
                     <th className="py-1 text-left">방향</th>
                     <th className="py-1 text-right">점수</th>
                     <th className="py-1 text-right">가격</th>
-                    <th className="py-1 text-right">손익</th>
+                    <th className="py-1 text-right">손익 (자본 대비)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {[...data.journal].reverse().map((e, i) => (
                     <tr key={`${e.at}-${i}`} className="border-t border-neutral-900">
-                      <td className="py-1 text-neutral-400">{formatDateTime(e.at)}</td>
+                      <td className="py-1 tabular-nums text-neutral-400">
+                        {formatDateTime(e.at)}
+                      </td>
                       <td className="text-neutral-300">
                         {e.type === 'trade'
                           ? (REASON_LABEL[e.trade?.exitReason ?? ''] ?? '체결')
@@ -418,7 +422,18 @@ export default function PaperPage() {
                             : 'text-[var(--color-short)]'
                         }`}
                       >
-                        {e.trade === undefined ? '—' : formatSignedUsd(e.trade.netPnl)}
+                        {e.trade === undefined ? (
+                          '—'
+                        ) : (
+                          <>
+                            <span className="font-semibold tabular-nums">
+                              {formatSignedPct(e.trade.netPnlPct)}
+                            </span>
+                            <span className="ml-1 tabular-nums text-neutral-500">
+                              ({formatSignedUsd(e.trade.netPnl)})
+                            </span>
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}

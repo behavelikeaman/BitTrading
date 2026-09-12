@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatDateShort,
   formatDateTime,
+  formatHourMinute,
   formatPct,
   formatPrice,
   formatQty,
@@ -8,8 +10,10 @@ import {
   formatProfitFactor,
   formatRatio,
   formatSignedUsd,
+  formatSignedPct,
   formatTime,
   formatUsd,
+  formatYear,
 } from '@/lib/format';
 
 describe('formatPrice', () => {
@@ -66,14 +70,41 @@ describe('formatRatio', () => {
 });
 
 describe('formatTime / formatDateTime', () => {
-  it('두 자리로 채운다', () => {
-    const ms = new Date(2026, 0, 5, 9, 7, 3).getTime();
+  it('UTC epoch를 한국 표준시(UTC+9)로 그린다', () => {
+    // 2026-01-05 00:07:03 UTC = 같은 날 09:07:03 KST
+    const ms = Date.UTC(2026, 0, 5, 0, 7, 3);
     expect(formatTime(ms)).toBe('09:07:03');
     expect(formatDateTime(ms)).toBe('2026-01-05 09:07');
+  });
+  it('KST로 날짜가 넘어가는 시각을 다음 날로 그린다', () => {
+    // 2026-01-05 15:30:00 UTC = 2026-01-06 00:30:00 KST
+    const ms = Date.UTC(2026, 0, 5, 15, 30, 0);
+    expect(formatTime(ms)).toBe('00:30:00');
+    expect(formatDateTime(ms)).toBe('2026-01-06 00:30');
+  });
+  it('브라우저 시간대와 무관하게 같은 값을 낸다', () => {
+    // getHours() 대신 고정 오프셋을 쓰므로 TZ 환경변수에 좌우되지 않는다.
+    const ms = Date.UTC(2026, 6, 1, 12, 0, 0);
+    expect(formatTime(ms)).toBe('21:00:00');
   });
   it('값이 없으면 대시다', () => {
     expect(formatTime(null)).toBe('—');
     expect(formatDateTime(undefined)).toBe('—');
+  });
+});
+
+describe('formatSignedPct', () => {
+  it('이익에 + 부호를 붙인다', () => {
+    expect(formatSignedPct(0.0123)).toBe('+1.23%');
+  });
+  it('손실은 - 부호를 그대로 쓴다', () => {
+    expect(formatSignedPct(-0.0456)).toBe('-4.56%');
+  });
+  it('0은 부호를 붙이지 않는다', () => {
+    expect(formatSignedPct(0)).toBe('0.00%');
+  });
+  it('값이 없으면 대시다', () => {
+    expect(formatSignedPct(null)).toBe('—');
   });
 });
 
@@ -86,5 +117,20 @@ describe('formatProfitFactor', () => {
   });
   it('일반 값은 소수점 2자리다', () => {
     expect(formatProfitFactor(2.5, true)).toBe('2.50');
+  });
+});
+
+describe('차트 축 눈금 포맷', () => {
+  it('KST 기준 날짜·시각·연도를 낸다', () => {
+    // 2026-01-05 15:30:00 UTC = 2026-01-06 00:30 KST
+    const ms = Date.UTC(2026, 0, 5, 15, 30, 0);
+    expect(formatDateShort(ms)).toBe('01-06');
+    expect(formatHourMinute(ms)).toBe('00:30');
+    expect(formatYear(ms)).toBe('2026');
+  });
+  it('값이 없으면 대시다', () => {
+    expect(formatDateShort(null)).toBe('—');
+    expect(formatHourMinute(undefined)).toBe('—');
+    expect(formatYear(Number.NaN)).toBe('—');
   });
 });

@@ -115,6 +115,20 @@ describe('scoreSignal — 개별 항목', () => {
     expect(item.passed).toBe(false);
   });
 
+  it('session: 설명에 KST 시각을 함께 적는다', () => {
+    // 화면의 다른 시각이 전부 KST이므로 이 칸만 UTC면 잘못 읽는다.
+    // 판정 기준(세션 창)은 UTC 그대로다.
+    const c = ctx({ nowMs: Date.UTC(2026, 0, 5, 10, 0, 0) });
+    const item = scoreSignal(c).items.find((i) => i.key === 'session')!;
+    expect(item.detail).toBe('KST 19시 (UTC 10시) vs UTC 7~21시');
+  });
+
+  it('session: KST 환산이 자정을 넘어가도 맞다', () => {
+    const c = ctx({ nowMs: Date.UTC(2026, 0, 5, 16, 0, 0) });
+    const item = scoreSignal(c).items.find((i) => i.key === 'session')!;
+    expect(item.detail).toBe('KST 1시 (UTC 16시) vs UTC 7~21시');
+  });
+
   it('session: 임계값을 config로 덮어쓸 수 있다', () => {
     const c = ctx({ nowMs: Date.UTC(2026, 0, 5, 3, 0, 0) });
     const item = scoreSignal(c, { sessionStartUtcHour: 0, sessionEndUtcHour: 24 }).items.find(

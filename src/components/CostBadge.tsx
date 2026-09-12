@@ -15,7 +15,7 @@ interface Props {
  */
 export function CostBadge({ params }: Props) {
   if (params === null) {
-    return <span className="text-xs text-neutral-500">체결비용 불러오는 중…</span>;
+    return <span className="text-xs text-neutral-400">체결비용 불러오는 중…</span>;
   }
 
   const roundTrip = (params.taker + params.slippageRate) * 2;

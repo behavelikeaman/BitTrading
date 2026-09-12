@@ -28,14 +28,16 @@ export function ScoreBreakdown({ items, score }: Props) {
                   className={
                     item.passed
                       ? 'text-[var(--color-long)]'
-                      : 'text-neutral-600'
+                      : 'text-neutral-500'
                   }
                 >
                   {item.passed ? '✓' : '✗'}
                 </span>
               </td>
-              <td className="w-36 py-1.5 align-top text-neutral-300">{item.label}</td>
-              <td className="py-1.5 align-top text-xs text-neutral-500">
+              <td className="w-36 py-1.5 align-top font-medium text-neutral-100">
+                {item.label}
+              </td>
+              <td className="py-1.5 align-top text-xs text-neutral-400">
                 {item.detail}
               </td>
             </tr>

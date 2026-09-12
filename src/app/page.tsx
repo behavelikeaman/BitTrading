@@ -12,7 +12,7 @@ import { SignalPanel } from '@/components/SignalPanel';
 import { computeIndicators } from '@/lib/indicators';
 import { useLocalStorage } from '@/lib/use-local-storage';
 import { TIMEFRAMES, timeframeSpec, type Timeframe } from '@/lib/timeframe';
-import { formatTime } from '@/lib/format';
+import { TIME_ZONE_LABEL, formatTime } from '@/lib/format';
 import type { AccountParamsResponse } from '@/app/api/account-params/route';
 import type { SignalResponse } from '@/app/api/signal/route';
 import type { Candle } from '@/types';
@@ -164,11 +164,11 @@ export default function Home() {
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-lg font-bold">BitTrading</h1>
-          <p className="text-xs text-neutral-500">
+          <p className="text-xs text-neutral-400">
             BTC-USDT 무기한 · {timeframeSpec(tf.timeframe).label} · 알림 전용 (주문은 직접 넣는다)
           </p>
         </div>
-        <div className="flex items-center gap-3 text-xs text-neutral-500">
+        <div className="flex items-center gap-3 text-xs text-neutral-400">
           <div className="flex rounded border border-neutral-800">
             {TIMEFRAMES.map((t) => (
               <button
@@ -187,7 +187,11 @@ export default function Home() {
           </div>
           <Link href="/backtest" className="hover:text-neutral-300">백테스트</Link>
           <Link href="/paper" className="hover:text-neutral-300">페이퍼</Link>
-          {data && <span>갱신 {formatTime(data.updatedAt)}</span>}
+          {data && (
+            <span>
+              갱신 {formatTime(data.updatedAt)} {TIME_ZONE_LABEL}
+            </span>
+          )}
           {!notifyEnabled && (
             <button
               type="button"
@@ -257,7 +261,7 @@ export default function Home() {
         price={data?.lastPrice ?? null}
       />
 
-      <footer className="pb-8 text-center text-xs text-neutral-600">
+      <footer className="pb-8 text-center text-xs text-neutral-500">
         이 도구는 매매 판단을 보조할 뿐 수익을 보장하지 않는다. 레버리지 거래는 원금 전액을 잃을 수 있다.
       </footer>
     </main>
