@@ -236,8 +236,9 @@ class StepExecutor:
 
         prompt = preamble + step_file.read_text()
         result = subprocess.run(
-            ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json", prompt],
+            ["claude", "-p", "--permission-mode", "auto", "--output-format", "json", prompt],
             cwd=self._root, capture_output=True, text=True, timeout=1800,
+            stdin=subprocess.DEVNULL,
         )
 
         if result.returncode != 0:
