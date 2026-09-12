@@ -2,14 +2,54 @@
   "project": "BitTrading",
   "phase": "0-core",
   "steps": [
-    { "step": 0, "name": "project-setup", "status": "pending" },
-    { "step": 1, "name": "types-and-indicators", "status": "pending" },
-    { "step": 2, "name": "signal-scoring", "status": "pending" },
-    { "step": 3, "name": "risk-engine", "status": "pending" },
-    { "step": 4, "name": "backtest-engine", "status": "pending" },
-    { "step": 5, "name": "market-data", "status": "pending" },
-    { "step": 6, "name": "api-routes", "status": "pending" },
-    { "step": 7, "name": "dashboard-ui", "status": "pending" },
-    { "step": 8, "name": "backtest-ui", "status": "pending" }
-  ]
+    {
+      "step": 0,
+      "name": "project-setup",
+      "status": "completed",
+      "started_at": "2026-09-12T16:30:53+0900",
+      "completed_at": "2026-09-12T16:30:53+0900",
+      "summary": "Next.js 15.5.25(App Router)+TS strict+Tailwind v4 골격 초기화. 설정: package.json(dev/build/start/lint/test, test는 vitest run --passWithNoTests), tsconfig.json(strict, @/* -> ./src/*), next.config.ts, postcss.config.mjs(@tailwindcss/postcss), eslint.config.mjs(next/core-web-vitals+next/typescript, ignores: .next data scripts next-env.d.ts), vitest.config.ts(@ alias를 fileURLToPath로 해석, environment node, include src/**/*.test.ts). 진입: src/app/layout.tsx(lang=ko), src/app/globals.css(다크 배경 #0a0a0b + 등폭 폰트 + long/short/neutral/warn 색 토큰), src/app/page.tsx(BitTrading 플레이스홀더). next 15.5.4는 CVE-2025-66478로 15.5.25로 상향. build/lint/test 전부 통과. 기존 docs/scripts/.claude/phases/CLAUDE.md/.env.example/.gitignore 보존."
+    },
+    {
+      "step": 1,
+      "name": "types-and-indicators",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "signal-scoring",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "name": "risk-engine",
+      "status": "pending"
+    },
+    {
+      "step": 4,
+      "name": "backtest-engine",
+      "status": "pending"
+    },
+    {
+      "step": 5,
+      "name": "market-data",
+      "status": "pending"
+    },
+    {
+      "step": 6,
+      "name": "api-routes",
+      "status": "pending"
+    },
+    {
+      "step": 7,
+      "name": "dashboard-ui",
+      "status": "pending"
+    },
+    {
+      "step": 8,
+      "name": "backtest-ui",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-09-12T16:30:53+0900"
 }

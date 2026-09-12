@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a0b;
+  --foreground: #e8e8ea;
+  --long: #22c55e;
+  --short: #ef4444;
+  --neutral: #6b7280;
+  --warn: #eab308;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-long: var(--long);
+  --color-short: var(--short);
+  --color-neutral: var(--neutral);
+  --color-warn: var(--warn);
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
