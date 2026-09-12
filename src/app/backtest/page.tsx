@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { DEFAULT_ENTRY_CONFIG } from '@/lib/signal/entry';
+import { SCORE_ITEM_COUNT } from '@/lib/signal/score';
 import { BacktestReport } from '@/components/BacktestReport';
 import { useLocalStorage } from '@/lib/use-local-storage';
 import { formatPct, formatUsd } from '@/lib/format';
@@ -39,8 +41,11 @@ const DEFAULTS: Params = {
   riskPctMedium: 0.01,
   atrStopMultiple: 1.2,
   targetRMultiple: 1.38,
-  highConvictionScore: 6,
-  mediumConvictionScore: 4,
+  // 시그널 기본값을 그대로 쓴다. 여기에 숫자를 다시 적으면 백테스트와
+  // 실시간이 다른 기준으로 판정하게 된다 (채점 항목이 10개로 늘어났을 때
+  // 실제로 6/4가 남아 백테스트만 느슨해졌다).
+  highConvictionScore: DEFAULT_ENTRY_CONFIG.highConvictionScore,
+  mediumConvictionScore: DEFAULT_ENTRY_CONFIG.mediumConvictionScore,
   entryType: 'market',
   limitValidBars: 3,
   maxHoldBars: 36,
@@ -117,7 +122,10 @@ function Field({
 }
 
 export default function BacktestPage() {
-  const [params, setParams] = useLocalStorage('bt.backtest', DEFAULTS);
+  // 키에 v2를 붙인 이유: 채점 항목이 8개에서 10개로 바뀌어 점수 기준의
+  // 의미가 달라졌다 (ADR-022). 예전 키를 그대로 쓰면 브라우저에 남은 6/4가
+  // 새 기본값 7/5를 덮어써 백테스트만 조용히 느슨해진다.
+  const [params, setParams] = useLocalStorage('bt.backtest.v2', DEFAULTS);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [compare, setCompare] = useState<{
     market: BacktestResult;
@@ -225,8 +233,18 @@ export default function BacktestPage() {
           <Field label="편도 슬리피지" value={params.slippageRatePerSide} step={0.0001} onChange={num('slippageRatePerSide')} />
           <Field label="리스크 (확신)" value={params.riskPctHigh} step={0.005} onChange={num('riskPctHigh')} />
           <Field label="리스크 (약간)" value={params.riskPctMedium} step={0.005} onChange={num('riskPctMedium')} />
-          <Field label="확신 점수 기준" value={params.highConvictionScore} step={1} onChange={num('highConvictionScore')} />
-          <Field label="약간 점수 기준" value={params.mediumConvictionScore} step={1} onChange={num('mediumConvictionScore')} />
+          <Field
+            label={`확신 점수 기준 (/${SCORE_ITEM_COUNT})`}
+            value={params.highConvictionScore}
+            step={1}
+            onChange={num('highConvictionScore')}
+          />
+          <Field
+            label={`약간 점수 기준 (/${SCORE_ITEM_COUNT})`}
+            value={params.mediumConvictionScore}
+            step={1}
+            onChange={num('mediumConvictionScore')}
+          />
           <label className="block">
             <span className="text-[10px] uppercase tracking-wide text-neutral-500">
               진입 방식
