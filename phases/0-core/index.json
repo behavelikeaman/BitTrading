@@ -45,7 +45,10 @@
     {
       "step": 5,
       "name": "market-data",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-12T17:18:15+0900",
+      "completed_at": "2026-09-12T17:18:15+0900",
+      "summary": "시세 수집과 파싱을 작성. 순수 함수(TDD): src/lib/parse-deepcoin.ts parseDeepcoinCandles(rows,intervalMs,nowMs)->Candle[] — 내림차순을 오름차순으로 뒤집고, 문자열을 숫자로 파싱하고, openTime+interval>nowMs인 미확정봉을 제외하고, 중복 openTime을 제거한다. docs/DEEPCOIN-API.md의 실제 응답 예시를 픽스처로 박았다(12개 테스트). src/lib/parse-binance.ts parseBinanceKlines(rows,nowMs) — 오름차순 유지, closeTime>nowMs 제외, 중복 제거(4개). src/lib/measure-slippage.ts measureSlippage(fills,intendedPrices)->{medianRate,sampleCount}|null — 불리한 방향을 양수로(매수는 비싸게, 매도는 싸게), 평균이 아닌 중앙값(이상 체결 1건이 평균을 5배 부풀리는 대비 테스트 포함), 표본 10건 미만이면 null 반환해 기본값 폴백(11개). src/services/binance.ts fetchHistoricalCandles({symbol,interval,startTime,endTime,onProgress}) — limit 1500 페이지네이션, 요청 간 120ms 지연, 진행이 없으면 루프 중단. src/services/deepcoin.ts: fetchRecentCandles(공개, 키 불필요, limit 최대 300, after로 역방향 페이지), fetchFundingRate, fetchStepMargin(ADR-012 구간표), fetchTradeFee(비공개, 절대값 정규화), fetchFills(ADR-014). 서명은 base64(HMAC-SHA256(secret, ISO8601+METHOD+\"/\"+requestPath[+body]))에 헤더 DC-ACCESS-KEY/-TIMESTAMP/-PASSPHRASE/-SIGN/appid 200103. 키가 없으면 비공개 호출은 throw가 아니라 null을 반환해 앱이 기본값으로 계속 동작한다. 공개 엔드포인트는 키 없이 동작한다. 응답 code!==\"0\"이면 msg를 담아 throw. scripts/fetch-history.ts + npm run fetch-history (tsx). 인자 검증·진행률·에러 메시지 확인 완료. 이 환경은 거래소 도메인이 egress 차단(403)이라 실제 다운로드는 로컬에서 해야 하며, 차단 사유가 그대로 노출됨을 확인했다. 주문·출금 엔드포인트 호출 없음(ADR-002). 테스트 27개 추가, 전체 180개 통과. build/lint 통과."
     },
     {
       "step": 6,

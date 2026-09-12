@@ -1,0 +1,201 @@
+import crypto from 'node:crypto';
+import type { Candle } from '@/types';
+import { parseDeepcoinCandles } from '@/lib/parse-deepcoin';
+import type { Fill } from '@/lib/measure-slippage';
+
+const BASE_URL = 'https://api.deepcoin.com';
+const DEFAULT_INST_ID = 'BTC-USDT-SWAP';
+/** 1회 최대 개수 (docs/DEEPCOIN-API.md) */
+const MAX_LIMIT = 300;
+
+const BAR_PARAM: Record<'5m' | '15m', string> = {
+  '5m': '5m',
+  '15m': '15m',
+};
+
+const INTERVAL_MS: Record<'5m' | '15m', number> = {
+  '5m': 300_000,
+  '15m': 900_000,
+};
+
+interface DeepcoinEnvelope<T> {
+  code: string;
+  msg: string;
+  data: T;
+}
+
+function buildPath(path: string, params: Record<string, string>): string {
+  const query = new URLSearchParams(params).toString();
+  return query.length > 0 ? `${path}?${query}` : path;
+}
+
+/**
+ * 비공개 엔드포인트용 서명 헤더 (docs/DEEPCOIN-API.md).
+ *
+ * payload = ISO8601 + METHOD + '/' + requestPath(쿼리 포함) [+ body]
+ * sign    = base64(HMAC-SHA256(secret, payload))
+ *
+ * 키가 없으면 null을 반환한다. 호출부는 기본값으로 폴백해야 하며,
+ * 공개 엔드포인트는 키 없이도 동작해야 한다.
+ */
+function signedHeaders(
+  method: 'GET' | 'POST',
+  requestPath: string,
+  body?: string,
+): Record<string, string> | null {
+  const apiKey = process.env.DEEPCOIN_API_KEY;
+  const secret = process.env.DEEPCOIN_API_SECRET;
+  const passphrase = process.env.DEEPCOIN_API_PASSPHRASE;
+  if (!apiKey || !secret || !passphrase) return null;
+
+  const timestamp = new Date().toISOString();
+  const payload = `${timestamp}${method}/${requestPath}${body ?? ''}`;
+  const signature = crypto
+    .createHmac('sha256', secret)
+    .update(payload)
+    .digest('base64');
+
+  return {
+    'DC-ACCESS-KEY': apiKey,
+    'DC-ACCESS-TIMESTAMP': timestamp,
+    'DC-ACCESS-PASSPHRASE': passphrase,
+    'DC-ACCESS-SIGN': signature,
+    appid: '200103',
+  };
+}
+
+async function getPublic<T>(
+  path: string,
+  params: Record<string, string>,
+): Promise<T> {
+  const requestPath = buildPath(path, params);
+  const response = await fetch(`${BASE_URL}/${requestPath}`, { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error(
+      `Deepcoin ${path} 조회 실패 (${response.status}): ${await response.text()}`,
+    );
+  }
+  const envelope = (await response.json()) as DeepcoinEnvelope<T>;
+  if (envelope.code !== '0') {
+    throw new Error(`Deepcoin ${path} 오류 (code ${envelope.code}): ${envelope.msg}`);
+  }
+  return envelope.data;
+}
+
+/** 키가 없거나 호출이 실패하면 null. 앱 전체는 기본값으로 계속 동작해야 한다. */
+async function getPrivate<T>(
+  path: string,
+  params: Record<string, string>,
+): Promise<T | null> {
+  const requestPath = buildPath(path, params);
+  const headers = signedHeaders('GET', requestPath);
+  if (headers === null) return null;
+
+  try {
+    const response = await fetch(`${BASE_URL}/${requestPath}`, {
+      headers,
+      cache: 'no-store',
+    });
+    if (!response.ok) return null;
+    const envelope = (await response.json()) as DeepcoinEnvelope<T>;
+    if (envelope.code !== '0') return null;
+    return envelope.data;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 실시간 캔들. 공개 엔드포인트이므로 키 없이 동작한다.
+ *
+ * 응답은 내림차순·문자열이고 마지막 캔들이 미확정일 수 있다. 세 가지 모두
+ * parseDeepcoinCandles가 처리한다 (오름차순 변환·숫자 파싱·미확정봉 제외).
+ */
+export async function fetchRecentCandles(input: {
+  instId?: string;
+  bar: '5m' | '15m';
+  limit?: number;
+  /** 이 시각(ms) 이전 구간. Deepcoin에는 since가 없어 역방향으로 페이지한다. */
+  after?: number;
+  nowMs?: number;
+}): Promise<Candle[]> {
+  const params: Record<string, string> = {
+    instId: input.instId ?? DEFAULT_INST_ID,
+    bar: BAR_PARAM[input.bar],
+    limit: String(Math.min(input.limit ?? MAX_LIMIT, MAX_LIMIT)),
+  };
+  if (input.after !== undefined) params.after = String(input.after);
+
+  const rows = await getPublic<string[][]>('deepcoin/market/candles', params);
+  return parseDeepcoinCandles(rows, INTERVAL_MS[input.bar], input.nowMs ?? Date.now());
+}
+
+/** 현재 펀딩비. 소수 비율로 정규화한다 (0.01% -> 0.0001). */
+export async function fetchFundingRate(instId = DEFAULT_INST_ID): Promise<number> {
+  const data = await getPublic<{ fundingRate?: string } | { fundingRate?: string }[]>(
+    'deepcoin/trade/fund-rate/current-funding-rate',
+    { instId },
+  );
+  const entry = Array.isArray(data) ? data[0] : data;
+  const rate = Number(entry?.fundingRate);
+  return Number.isFinite(rate) ? rate : 0;
+}
+
+/** 유지증거금 구간표 (ADR-012). 청산가를 추정치가 아닌 실제 값으로 계산한다. */
+export async function fetchStepMargin(
+  instId = DEFAULT_INST_ID,
+): Promise<{ tiers: { maxNotional: number; mmr: number }[] } | null> {
+  try {
+    const data = await getPublic<
+      { maxSz?: string; maxNotional?: string; mmr?: string }[]
+    >('deepcoin/market/step-margin', { instId });
+    const tiers = (data ?? [])
+      .map((row) => ({
+        maxNotional: Number(row.maxNotional ?? row.maxSz),
+        mmr: Number(row.mmr),
+      }))
+      .filter((t) => Number.isFinite(t.maxNotional) && Number.isFinite(t.mmr));
+    return tiers.length > 0 ? { tiers } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 실제 수수료율 (ADR-012). 키가 없으면 null이고 호출부는 기본값을 쓴다. */
+export async function fetchTradeFee(
+  instId = DEFAULT_INST_ID,
+): Promise<{ maker: number; taker: number } | null> {
+  const data = await getPrivate<{ maker?: string; taker?: string }>(
+    'deepcoin/account/trade-fee',
+    { instId },
+  );
+  if (data === null) return null;
+  // Deepcoin은 수수료를 음수로 주는 경우가 있어 절대값으로 정규화한다.
+  const maker = Math.abs(Number(data.maker));
+  const taker = Math.abs(Number(data.taker));
+  if (!Number.isFinite(maker) || !Number.isFinite(taker)) return null;
+  return { maker, taker };
+}
+
+/** 실제 체결 내역 (ADR-014). 슬리피지 실측용. */
+export async function fetchFills(input: {
+  instId?: string;
+  limit?: number;
+} = {}): Promise<Fill[] | null> {
+  const data = await getPrivate<
+    { ts?: string; side?: string; fillPx?: string; fillSz?: string }[]
+  >('deepcoin/trade/fills', {
+    instId: input.instId ?? DEFAULT_INST_ID,
+    limit: String(input.limit ?? 100),
+  });
+  if (data === null) return null;
+
+  return (data ?? [])
+    .map((row) => ({
+      ts: Number(row.ts),
+      side: row.side === 'sell' ? ('sell' as const) : ('buy' as const),
+      fillPrice: Number(row.fillPx),
+      qty: Number(row.fillSz),
+    }))
+    .filter((f) => Number.isFinite(f.ts) && Number.isFinite(f.fillPrice));
+}
