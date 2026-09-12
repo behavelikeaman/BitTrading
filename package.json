@@ -11,6 +11,7 @@
     "fetch-history": "tsx scripts/fetch-history.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.125.0",
     "next": "15.5.25",
     "react": "19.1.1",
     "react-dom": "19.1.1"
@@ -24,8 +25,8 @@
     "eslint": "^9.35.0",
     "eslint-config-next": "15.5.25",
     "tailwindcss": "^4.1.13",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4",
-    "tsx": "^4.20.6"
+    "vitest": "^3.2.4"
   }
 }

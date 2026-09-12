@@ -52,7 +52,9 @@ ADR-012. Deepcoin에서 **실측** 수수료율과 유지증거금 구간표를 
 ### 5. `src/app/api/commentary/route.ts` — POST
 
 - `@anthropic-ai/sdk`를 그대로 사용한다 (ADR-011). devDependency가 아닌 dependency로 설치.
-- 모델은 `claude-sonnet-4-6`, `max_tokens`는 600 정도.
+- 모델은 `claude-opus-5`. `max_tokens`는 한 문단 분량이므로 800 정도로 둔다(의도적으로 짧은 출력).
+- 해설은 단순 요약 작업이므로 `output_config: { effort: 'low' }`로 비용을 낮춘다.
+- `claude-opus-5`는 사고가 기본 활성이며 `budget_tokens`는 400 에러다. 쓰지 마라.
 - 입력: 현재 `IndicatorSnapshot` + `ScoreItem[]` + 최근 캔들 요약.
 - 출력: 현재 레짐(추세/횡보/변동성 확대)을 한 문단으로 설명하는 한국어 텍스트.
 - 프롬프트에 **"진입·청산·수량을 지시하지 말고 시장 상태만 설명하라"**고 명시한다 (ADR-010).

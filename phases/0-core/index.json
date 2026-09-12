@@ -53,7 +53,10 @@
     {
       "step": 6,
       "name": "api-routes",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-12T17:23:10+0900",
+      "completed_at": "2026-09-12T17:23:10+0900",
+      "summary": "API 라우트 5개. 전부 runtime=nodejs이며 src/lib/·src/services/를 조립만 하고 계산하지 않는다. GET /api/signal — deepcoin 5분봉 300 + 15분봉 200 + 펀딩 -> evaluateEntry -> conviction!==none이면 planPosition. GuardState와 계좌 설정(equity/leverage/fee/slippage/riskPct/atrStopMultiple/targetRMultiple/costSource)을 쿼리로 받는다(v1은 DB 없음). nowMs는 서버가 주입한다. 응답 {signal, plan, lastPrice, lastClosedAt, fundingRate, updatedAt}. GET /api/account-params — fetchTradeFee/fetchStepMargin/fetchFills/캔들을 병렬로 받아 measureSlippage로 슬리피지 실측. 체결 시각을 5분봉 경계로 내림해 해당 봉 시가를 의도 가격으로 쓴다. 키가 없거나 실패해도 500이 아니라 200 + feeSource/slippageSource=\"default\"를 반환한다(키 없는 사용자도 앱을 써야 한다). GET /api/candles — 차트용 실시간 캔들 전달. POST /api/backtest — data/{symbol}-{interval}-{from}-{to}.json을 읽어 runBacktest. 파일이 없으면 404 + hint에 fetch-history 명령. maxDuration 300. account·entry는 중첩 객체라 얕은 병합이 아니라 따로 병합한다. POST /api/commentary — @anthropic-ai/sdk 그대로 사용, 요청당 1회 호출, 재시도 루프 없음. 모델은 claude-opus-5(step 정의에 적혀 있던 claude-sonnet-4-6은 이전 세대라 교정). max_tokens 800, output_config.effort=\"low\"(단순 요약). budget_tokens는 claude-opus-5에서 400 에러이므로 쓰지 않는다. 정책 거절 대비로 server-side fallbacks(\"default\") 사용. 시스템 프롬프트에 진입·청산·수량 지시 금지를 명시(ADR-010). Anthropic 타입 예외로 401/429/기타를 구분 매핑. 에러 매핑 실측 확인: account-params 200(기본값), backtest 404(+안내)·400(본문 누락), signal·candles 502(거래소 차단 사유 노출), candles 400(잘못된 limit), commentary 500(키 미설정). dev 서버로 전부 호출해 검증했다. 주문·출금 엔드포인트 없음(ADR-002). build/lint/test(180개) 통과."
     },
     {
       "step": 7,
