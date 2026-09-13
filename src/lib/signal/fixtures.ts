@@ -56,11 +56,6 @@ export function realisticBreakout(): number[] {
   return closes;
 }
 
-/** 15분봉 상승 시리즈 (EMA50 기울기 양수) */
-export function risingHtf(count = 80): number[] {
-  return Array.from({ length: count }, (_, i) => 100 + i * 0.5);
-}
-
 /**
  * 2번 케이스 — 눌림목 재진입 롱.
  *

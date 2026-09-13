@@ -335,8 +335,7 @@ export default function BacktestPage() {
         </div>
 
         <p className="mt-3 text-xs text-neutral-500">
-          기준 {timeframeSpec(params.timeframe).label} (상위{' '}
-          {timeframeSpec(params.timeframe).higher}) · 이론 손익분기 승률{' '}
+          기준 {timeframeSpec(params.timeframe).label} · 이론 손익분기 승률{' '}
           <span className="text-neutral-200">{formatPct(breakEven)}</span> · 왕복 총마찰{' '}
           {formatPct((params.feeRatePerSide + params.slippageRatePerSide) * 2, 4)} (증거금 대비{' '}
           {formatPct((params.feeRatePerSide + params.slippageRatePerSide) * 2 * params.leverage)})

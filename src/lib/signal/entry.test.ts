@@ -6,7 +6,6 @@ import {
   flatThenJump,
   overextendedChaseLong,
   overextendedReversionShort,
-  risingHtf,
   trendPullbackLong,
 } from '@/lib/signal/fixtures';
 import type { GuardState, SignalContext } from '@/types';
@@ -21,8 +20,7 @@ function withVolumeSpike(closes: number[]) {
 
 function ctxOf(closes: number[], over: Partial<SignalContext> = {}): SignalContext {
   return {
-    candles5m: withVolumeSpike(closes),
-    candles15m: candlesFromCloses(risingHtf()),
+    candles: withVolumeSpike(closes),
     fundingRate: 0,
     nowMs: NOON_UTC,
     ...over,
@@ -44,7 +42,7 @@ const flatCtx = (over: Partial<SignalContext> = {}) =>
 /** 거래량이 실리지 않아 점수 한 칸이 빠지는 눌림목 */
 const lowVolumePullbackCtx = () =>
   pullbackCtx({
-    candles5m: candlesFromCloses(trendPullbackLong(), { volume: 1000, spread: 0.4 }),
+    candles: candlesFromCloses(trendPullbackLong(), { volume: 1000, spread: 0.4 }),
   });
 
 describe('evaluateEntry — 실전 셋업 두 가지', () => {
@@ -193,7 +191,7 @@ describe('evaluateEntry — 0단계 차단 조건', () => {
   it('데이터가 부족하면 "데이터 부족" 하나로만 차단된다', () => {
     // 판정 불가를 여러 사유로 쪼개 적으면 무엇이 진짜 문제인지 흐려진다.
     const signal = evaluateEntry(
-      flatCtx({ candles5m: candlesFromCloses([100, 101, 102]) }),
+      flatCtx({ candles: candlesFromCloses([100, 101, 102]) }),
       CLEAN_GUARD,
     );
     expect(signal.blockers).toContain('데이터 부족');

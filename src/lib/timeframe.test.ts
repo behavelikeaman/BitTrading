@@ -2,34 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { parseTimeframe, TIMEFRAMES, timeframeSpec } from '@/lib/timeframe';
 
 describe('timeframeSpec', () => {
-  it('5분봉의 상위는 15분봉이다', () => {
-    const s = timeframeSpec('5m');
-    expect(s.higher).toBe('15m');
-    expect(s.barMs).toBe(300_000);
-    expect(s.higherMs).toBe(900_000);
+  it('봉 길이를 ms로 준다', () => {
+    expect(timeframeSpec('5m').barMs).toBe(300_000);
+    expect(timeframeSpec('15m').barMs).toBe(900_000);
   });
 
-  it('15분봉의 상위는 1시간봉이다', () => {
-    const s = timeframeSpec('15m');
-    expect(s.higher).toBe('1h');
-    expect(s.barMs).toBe(900_000);
-    expect(s.higherMs).toBe(3_600_000);
+  it('거래소별 파라미터 표기를 한 곳에서 매핑한다', () => {
+    expect(timeframeSpec('5m').deepcoinBar).toBe('5m');
+    expect(timeframeSpec('15m').binanceInterval).toBe('15m');
   });
 
-  it('Deepcoin은 1시간 이상을 대문자로 쓴다', () => {
-    expect(timeframeSpec('5m').deepcoinHigherBar).toBe('15m');
-    expect(timeframeSpec('15m').deepcoinHigherBar).toBe('1H');
-  });
-
-  it('Binance는 전부 소문자다', () => {
-    expect(timeframeSpec('15m').binanceHigherInterval).toBe('1h');
-  });
-
-  it('상위 프레임은 기준 봉의 정수배다', () => {
+  it('상위 프레임 필드를 들고 있지 않다 (ADR-026)', () => {
+    // 어떤 판정도 읽지 않는 값을 스펙에 남겨두면 다시 그 경로가 자란다.
     for (const tf of TIMEFRAMES) {
-      const s = timeframeSpec(tf);
-      expect(s.higherMs % s.barMs).toBe(0);
-      expect(s.higherMs / s.barMs).toBeGreaterThan(1);
+      const keys = Object.keys(timeframeSpec(tf));
+      expect(keys.filter((k) => k.toLowerCase().includes('higher'))).toEqual([]);
     }
   });
 

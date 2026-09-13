@@ -106,7 +106,7 @@ async function main(): Promise<void> {
   log('');
 
   const spec = timeframeSpec(args.timeframe);
-  log(`기준 봉 ${spec.label} (상위 ${spec.higher})`);
+  log(`기준 봉 ${spec.label}`);
   log('');
 
   const execConfig = toExecutionConfig({
@@ -127,16 +127,15 @@ async function main(): Promise<void> {
 
   while (!stopping) {
     try {
-      const [candles5m, candles15m, fundingRate] = await Promise.all([
+      const [candles, fundingRate] = await Promise.all([
         fetchRecentCandles({ bar: spec.primary, limit: 300 }),
-        fetchRecentCandles({ bar: spec.higher, limit: 200 }),
         fetchFundingRate().catch(() => 0),
       ]);
       consecutiveFailures = 0;
 
       // 밀린 캔들을 전부 순서대로 소화한다. 마지막 봉만 처리하면
       // 그 사이의 손절을 통째로 건너뛴다.
-      const todo = pendingCandles(state, candles5m);
+      const todo = pendingCandles(state, candles);
 
       for (const candle of todo) {
         const day = Math.floor(candle.openTime / MS_DAY);
@@ -172,14 +171,10 @@ async function main(): Promise<void> {
 
         // 플랫이면 이 캔들 종가로 시그널을 평가한다.
         if (state.position === null && state.pending === null) {
-          const upTo = candles5m.filter((c) => c.openTime <= candle.openTime);
-          const htfUpTo = candles15m.filter(
-            (c) => c.openTime + spec.higherMs <= candle.openTime + spec.barMs,
-          );
+          const upTo = candles.filter((c) => c.openTime <= candle.openTime);
           const signal = evaluateEntry(
             {
-              candles5m: upTo.slice(-DEFAULT_BACKTEST_PARAMS.signalWindowBars),
-              candles15m: htfUpTo.slice(-DEFAULT_BACKTEST_PARAMS.signalWindowBars),
+              candles: upTo.slice(-DEFAULT_BACKTEST_PARAMS.signalWindowBars),
               fundingRate,
               nowMs: candle.openTime,
             },

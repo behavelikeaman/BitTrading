@@ -45,14 +45,10 @@ async function main(): Promise<void> {
   const to = dayString(paperTrades[paperTrades.length - 1].exitTime + 86_400_000);
 
   const dir = path.resolve(process.cwd(), 'data');
-  const file5m = path.join(dir, `btcusdt-5m-${from}-${to}.json`);
-  const file15m = path.join(dir, `btcusdt-15m-${from}-${to}.json`);
-  const [candles5m, candles15m] = await Promise.all([
-    loadCandles(file5m),
-    loadCandles(file15m),
-  ]);
+  const file = path.join(dir, `btcusdt-5m-${from}-${to}.json`);
+  const candles = await loadCandles(file);
 
-  if (candles5m === null || candles15m === null) {
+  if (candles === null) {
     log(`페이퍼가 커버한 구간(${from} ~ ${to})의 과거 캔들이 없다.`);
     log('먼저 내려받아라 (로컬에서 실행):');
     log(`  npm run fetch-history -- --from ${from} --to ${to}`);
@@ -60,8 +56,7 @@ async function main(): Promise<void> {
   }
 
   const result = runBacktest({
-    candles5m,
-    candles15m,
+    candles,
     params: {
       ...DEFAULT_BACKTEST_PARAMS,
       account: DEFAULT_ACCOUNT,

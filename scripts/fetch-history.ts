@@ -1,5 +1,5 @@
 /**
- * 과거 5분봉·15분봉을 내려받아 data/ 에 저장한다.
+ * 선택한 기준 봉의 과거 캔들을 내려받아 data/ 에 저장한다.
  *
  * 거래소 도메인 접근이 필요하므로 **로컬에서 실행**한다. 네트워크가 제한된
  * CI·클라우드 환경에서는 차단된다.
@@ -56,31 +56,25 @@ async function main(): Promise<void> {
   await mkdir(outDir, { recursive: true });
 
   const spec = timeframeSpec(args.timeframe);
-  // 기준봉과 상위봉 둘 다 있어야 백테스트가 돈다.
-  const intervals = [spec.binanceInterval, spec.binanceHigherInterval] as const;
-  process.stderr.write(
-    `\n${spec.label} 기준 (상위 ${spec.higher}) · ${args.from} ~ ${args.to}\n`,
-  );
+  // 기준봉 하나면 백테스트가 돈다. 상위봉은 판정에서 빠졌다 (ADR-026).
+  const interval = spec.binanceInterval;
+  process.stderr.write(`\n${spec.label} · ${args.from} ~ ${args.to}\n`);
+  process.stderr.write(`\n${args.symbol} ${interval}\n`);
 
-  for (const interval of intervals) {
-    process.stderr.write(`\n${args.symbol} ${interval}\n`);
+  const candles = await fetchHistoricalCandles({
+    symbol: args.symbol,
+    interval,
+    startTime,
+    endTime,
+    onProgress: (fetched, lastOpenTime) => {
+      const at = new Date(lastOpenTime).toISOString().slice(0, 16);
+      process.stderr.write(`\r  ${fetched.toLocaleString()}개 수집 · ${at}   `);
+    },
+  });
 
-    const candles = await fetchHistoricalCandles({
-      symbol: args.symbol,
-      interval,
-      startTime,
-      endTime,
-      onProgress: (fetched, lastOpenTime) => {
-        const at = new Date(lastOpenTime).toISOString().slice(0, 16);
-        process.stderr.write(`\r  ${fetched.toLocaleString()}개 수집 · ${at}   `);
-      },
-    });
-
-    const name = candleFileName(args.symbol, interval, args.from, args.to);
-    const file = path.join(outDir, name);
-    await writeFile(file, JSON.stringify(candles), 'utf8');
-    process.stderr.write(`\r  ${candles.length.toLocaleString()}개 -> data/${name}\n`);
-  }
+  const name = candleFileName(args.symbol, interval, args.from, args.to);
+  await writeFile(path.join(outDir, name), JSON.stringify(candles), 'utf8');
+  process.stderr.write(`\r  ${candles.length.toLocaleString()}개 -> data/${name}\n`);
 
   process.stderr.write(
     `\n완료. 백테스트 화면에서 이 기간과 ${spec.label}을 선택하면 된다.\n`,

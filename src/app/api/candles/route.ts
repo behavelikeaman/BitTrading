@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchRecentCandles } from '@/services/deepcoin';
+import { parseTimeframe } from '@/lib/timeframe';
 import type { Candle } from '@/types';
 
 export const runtime = 'nodejs';
@@ -9,8 +10,8 @@ export async function GET(
   request: Request,
 ): Promise<NextResponse<{ candles: Candle[] } | { error: string }>> {
   const params = new URL(request.url).searchParams;
-  const raw = params.get('bar');
-  const bar = raw === '15m' ? '15m' : raw === '1h' ? '1h' : '5m';
+  // 차트도 기준 봉만 그린다. 상위 프레임 캔들을 받아오는 경로는 없앴다 (ADR-026).
+  const bar = parseTimeframe(params.get('bar'));
   const limit = Number(params.get('limit') ?? 200);
 
   if (!Number.isFinite(limit) || limit <= 0) {

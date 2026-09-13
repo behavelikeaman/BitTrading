@@ -4,7 +4,6 @@ import { DEFAULT_ENTRY_CONFIG } from '@/lib/signal/entry';
 import { DEFAULT_BACKTEST_PARAMS, type BacktestParams } from '@/lib/backtest/engine';
 
 const MS_5M = 300_000;
-const MS_15M = 900_000;
 
 /**
  * 시나리오의 진입 신호가 UTC 15:10(세션 안)에 떨어지도록 맞춘 시작 시각.
@@ -61,22 +60,6 @@ export function candles5m(
   });
 }
 
-/** 5분봉과 시각 축을 맞춘 15분봉 */
-export function candles15m(closes: number[], startMs = START_MS): Candle[] {
-  return closes.map((close, i) => {
-    const open = i === 0 ? close : closes[i - 1];
-    return {
-      openTime: startMs + i * MS_15M,
-      open,
-      high: Math.max(open, close) + 1,
-      low: Math.min(open, close) - 1,
-      close,
-      volume: 1000,
-      closed: true,
-    };
-  });
-}
-
 /**
  * 진입 신호가 반복적으로 나오는 시리즈.
  *
@@ -112,12 +95,6 @@ export function breakoutVolumes(closes: number[]): number[] {
   return closes.map((c, i) => (i > 0 && c - closes[i - 1] > 1.5 ? 5000 : 1000));
 }
 
-/** 15분봉 상승 시리즈 (5분봉 개수에 맞춰 1/3 길이) */
-export function risingHtfFor(count5m: number): number[] {
-  const n = Math.ceil(count5m / 3) + 60;
-  return Array.from({ length: n }, (_, i) => 100 + i * 0.5);
-}
-
 export interface Bar {
   open: number;
   high: number;
@@ -150,10 +127,7 @@ const WARMUP_CLOSES = [...stackWarmup(), ...repeatingBreakouts(1).slice(0, 74)];
  *
  * 진입은 워밍업 마지막 캔들의 신호로 `after[0]`의 시가에 체결된다.
  */
-export function scenario(after: Bar[]): {
-  candles5m: Candle[];
-  candles15m: Candle[];
-} {
+export function scenario(after: Bar[]): { candles: Candle[] } {
   const warmup = candles5m(WARMUP_CLOSES, {
     volume: breakoutVolumes(WARMUP_CLOSES),
   });
@@ -166,11 +140,7 @@ export function scenario(after: Bar[]): {
     volume: bar.volume ?? 1000,
     closed: true,
   }));
-  const total = WARMUP_CLOSES.length + after.length;
-  return {
-    candles5m: [...warmup, ...tail],
-    candles15m: candles15m(risingHtfFor(total)),
-  };
+  return { candles: [...warmup, ...tail] };
 }
 
 /** 워밍업 마지막 종가 — 진입 캔들을 여기서부터 설계한다. */

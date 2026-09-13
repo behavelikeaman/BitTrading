@@ -5,12 +5,11 @@ const BASE_URL = 'https://fapi.binance.com';
 /** 1회 최대 개수. 이보다 긴 구간은 페이지네이션한다. */
 const MAX_LIMIT = 1500;
 
-export type BinanceInterval = '5m' | '15m' | '1h';
+export type BinanceInterval = '5m' | '15m';
 
 const INTERVAL_MS: Record<BinanceInterval, number> = {
   '5m': 300_000,
   '15m': 900_000,
-  '1h': 3_600_000,
 };
 
 /** 레이트리밋 회피용 최소 간격 */

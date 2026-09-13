@@ -63,7 +63,7 @@ phases/                         # Harness step 정의
 ```
 브라우저 (5초 폴링)
   -> GET /api/signal
-       services/deepcoin.ts   : 5분봉 200개 + 15분봉 100개 + 펀딩
+       services/deepcoin.ts   : 기준 봉 300개 + 펀딩
        lib/indicators/*       : EMA12 / SMA20 / BB / ATR / ADX / 거래량평균
        lib/signal/score.ts    : 게이트·트리거·점수 3항목 판정
        lib/signal/entry.ts    : 차단 조건 통과 여부 + 방향 + 등급(기본 전 거래 동일)

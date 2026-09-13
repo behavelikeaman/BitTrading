@@ -393,8 +393,7 @@ describe('반환 구조', () => {
       closed: true,
     }));
     const r = runBacktest({
-      candles5m: flat,
-      candles15m: flat,
+      candles: flat,
       params: testParams(),
     });
     expect(r.totalTrades).toBe(0);
@@ -404,7 +403,7 @@ describe('반환 구조', () => {
   });
 
   it('빈 입력에서도 예외가 나지 않는다', () => {
-    const r = runBacktest({ candles5m: [], candles15m: [], params: testParams() });
+    const r = runBacktest({ candles: [], params: testParams() });
     expect(r.totalTrades).toBe(0);
     expect(r.equityCurve).toEqual([]);
   });

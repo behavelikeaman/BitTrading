@@ -8,7 +8,7 @@ import {
 } from '@/lib/backtest/engine';
 import { DEFAULT_ENTRY_CONFIG } from '@/lib/signal/entry';
 import { DEFAULT_ACCOUNT } from '@/lib/risk/sizing';
-import { candleFileNames } from '@/lib/data-files';
+import { candleFileFor } from '@/lib/data-files';
 import { parseTimeframe } from '@/lib/timeframe';
 import type { BacktestResult, Candle } from '@/types';
 
@@ -55,18 +55,14 @@ export async function POST(
   }
 
   const timeframe = parseTimeframe(body.params?.timeframe);
-  const names = candleFileNames(symbol, timeframe, from, to);
+  const name = candleFileFor(symbol, timeframe, from, to);
   const dir = path.resolve(process.cwd(), 'data');
-  const [candles5m, candles15m] = await Promise.all([
-    loadCandles(path.join(dir, names.primary)),
-    loadCandles(path.join(dir, names.higher)),
-  ]);
+  const candles = await loadCandles(path.join(dir, name));
 
-  if (candles5m === null || candles15m === null) {
-    const missing = candles5m === null ? names.primary : names.higher;
+  if (candles === null) {
     return NextResponse.json(
       {
-        error: `과거 데이터가 없다: ${missing}`,
+        error: `과거 데이터가 없다: ${name}`,
         hint: `npm run fetch-history -- --from ${from} --to ${to} --timeframe ${timeframe}${symbol === 'BTCUSDT' ? '' : ` --symbol ${symbol}`}`,
       },
       { status: 404 },
@@ -84,7 +80,7 @@ export async function POST(
   };
 
   try {
-    return NextResponse.json(runBacktest({ candles5m, candles15m, params }));
+    return NextResponse.json(runBacktest({ candles, params }));
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : '백테스트 실패' },

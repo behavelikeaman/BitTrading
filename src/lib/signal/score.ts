@@ -118,12 +118,12 @@ export function scoreSignal(
   config?: Partial<ScoreConfig>,
 ): ScoreResult {
   const cfg = { ...DEFAULT_SCORE_CONFIG, ...config };
-  const closed5m = ctx.candles5m.filter((c) => c.closed);
+  const closed = ctx.candles.filter((c) => c.closed);
 
-  const snapshots = computeIndicators(closed5m);
+  const snapshots = computeIndicators(closed);
   const lastIndex = snapshots.length - 1;
   const indicators = lastIndex >= 0 ? snapshots[lastIndex] : null;
-  const lastCandle = lastIndex >= 0 ? closed5m[lastIndex] : null;
+  const lastCandle = lastIndex >= 0 ? closed[lastIndex] : null;
 
   const setup = classifySetup(snapshots, lastIndex, cfg);
   const direction = setup.direction;

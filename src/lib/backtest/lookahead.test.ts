@@ -2,10 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { runBacktest } from '@/lib/backtest/engine';
 import {
   breakoutVolumes,
-  candles15m,
   candles5m,
   repeatingBreakouts,
-  risingHtfFor,
   testParams,
 } from '@/lib/backtest/fixtures';
 
@@ -20,20 +18,17 @@ describe('룩어헤드 편향', () => {
   const closes = repeatingBreakouts(12);
   const volumes = breakoutVolumes(closes);
   const full5m = candles5m(closes, { volume: volumes });
-  const full15m = candles15m(risingHtfFor(closes.length));
 
   it('뒷부분을 잘라내도 앞부분 트레이드가 동일하다', () => {
     const full = runBacktest({
-      candles5m: full5m,
-      candles15m: full15m,
+      candles: full5m,
       params: testParams(),
     });
     expect(full.trades.length).toBeGreaterThan(1);
 
     const cut = Math.floor(full5m.length * 0.6);
     const partial = runBacktest({
-      candles5m: full5m.slice(0, cut),
-      candles15m: full15m,
+      candles: full5m.slice(0, cut),
       params: testParams(),
     });
 
@@ -60,8 +55,7 @@ describe('룩어헤드 편향', () => {
 
   it('뒷부분 가격을 완전히 바꿔도 앞부분 트레이드가 동일하다', () => {
     const base = runBacktest({
-      candles5m: full5m,
-      candles15m: full15m,
+      candles: full5m,
       params: testParams(),
     });
 
@@ -70,8 +64,7 @@ describe('룩어헤드 편향', () => {
       i < cut ? c : { ...c, open: c.open * 3, high: c.high * 3, low: c.low * 3, close: c.close * 3 },
     );
     const after = runBacktest({
-      candles5m: mutated,
-      candles15m: full15m,
+      candles: mutated,
       params: testParams(),
     });
 
@@ -88,8 +81,7 @@ describe('룩어헤드 편향', () => {
 
   it('체결은 신호 캔들의 다음 캔들부터 일어난다', () => {
     const result = runBacktest({
-      candles5m: full5m,
-      candles15m: full15m,
+      candles: full5m,
       params: testParams(),
     });
     const MS_5M = 300_000;

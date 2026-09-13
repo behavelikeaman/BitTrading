@@ -37,7 +37,7 @@ const MS_DAY = 24 * 60 * 60 * 1000;
 export interface BacktestParams {
   account: AccountConfig;
   entry: EntryConfig;
-  /** 기준 타임프레임. 상위 프레임은 자동으로 한 단계 위가 된다. */
+  /** 기준 타임프레임. 프레임은 하나뿐이다 (ADR-026). */
   timeframe: Timeframe;
   ladderHigh: LadderPlanInput;
   ladderMedium: LadderPlanInput;
@@ -95,7 +95,7 @@ export function toExecutionConfig(params: BacktestParams): ExecutionConfig {
 }
 
 /**
- * 5분봉 백테스트.
+ * 기준 봉 백테스트.
  *
  * 체결·청산 판정은 src/lib/execution/machine.ts의 상태 기계가 맡고, 여기서는
  * 루프·시그널 평가·가드 갱신·자본 복리·집계만 한다. 페이퍼 트레이더가 같은
@@ -103,20 +103,17 @@ export function toExecutionConfig(params: BacktestParams): ExecutionConfig {
  *
  * 룩어헤드 금지 규칙:
  * - 캔들 i의 시그널은 캔들 i의 종가까지만 쓴다 (창은 [i-signalWindowBars+1, i]).
- * - 15분봉은 캔들 i가 끝난 시각까지 이미 종료된 것만 넘긴다.
  * - 체결은 캔들 i+1부터 일어난다.
  */
 export function runBacktest(input: {
-  candles5m: Candle[];
-  candles15m: Candle[];
+  candles: Candle[];
   params: BacktestParams;
 }): BacktestResult {
   const { params } = input;
   const { account, entry } = params;
-  const candles = input.candles5m.filter((c) => c.closed);
-  const htf = input.candles15m.filter((c) => c.closed);
+  const candles = input.candles.filter((c) => c.closed);
   const execConfig = toExecutionConfig(params);
-  const { barMs, higherMs } = timeframeSpec(params.timeframe);
+  const { barMs } = timeframeSpec(params.timeframe);
 
   const trades: Trade[] = [];
   let equity = account.equity;
@@ -128,9 +125,6 @@ export function runBacktest(input: {
 
   let pending: PendingOrder | null = null;
   let position: OpenPosition | null = null;
-
-  /** 15분봉 포인터 — 매 캔들 필터링하면 O(n*m)이 된다 */
-  let htfCursor = 0;
 
   for (let i = 0; i < candles.length; i++) {
     const candle = candles[i];
@@ -162,25 +156,11 @@ export function runBacktest(input: {
     // --- 플랫이면 이 캔들 종가로 시그널을 평가한다 ---
     if (position === null && pending === null && i + 1 < candles.length) {
       const windowStart = Math.max(0, i + 1 - params.signalWindowBars);
-      const window5m = candles.slice(windowStart, i + 1);
-
-      // 캔들 i가 끝난 시각까지 이미 종료된 상위 프레임 봉만 넘긴다.
-      const htfDeadline = candle.openTime + barMs;
-      while (
-        htfCursor < htf.length &&
-        htf[htfCursor].openTime + higherMs <= htfDeadline
-      ) {
-        htfCursor += 1;
-      }
-      const window15m = htf.slice(
-        Math.max(0, htfCursor - params.signalWindowBars),
-        htfCursor,
-      );
+      const window = candles.slice(windowStart, i + 1);
 
       const signal = evaluateEntry(
         {
-          candles5m: window5m,
-          candles15m: window15m,
+          candles: window,
           fundingRate: params.fundingRatePerInterval,
           nowMs: candle.openTime,
         },

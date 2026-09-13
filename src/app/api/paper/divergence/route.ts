@@ -7,7 +7,7 @@ import { compareTrades, type DivergenceReport } from '@/lib/paper/divergence';
 import { DEFAULT_BACKTEST_PARAMS, runBacktest } from '@/lib/backtest/engine';
 import { DEFAULT_ACCOUNT } from '@/lib/risk/sizing';
 import { DEFAULT_ENTRY_CONFIG } from '@/lib/signal/entry';
-import { candleFileNames } from '@/lib/data-files';
+import { candleFileFor } from '@/lib/data-files';
 import type { Candle } from '@/types';
 
 export const runtime = 'nodejs';
@@ -47,13 +47,10 @@ export async function POST(): Promise<
   const from = dayString(paperTrades[0].entryTime);
   const to = dayString(paperTrades[paperTrades.length - 1].exitTime + 86_400_000);
   const dir = path.resolve(process.cwd(), 'data');
-  const names = candleFileNames('BTCUSDT', DEFAULT_BACKTEST_PARAMS.timeframe, from, to);
-  const [candles5m, candles15m] = await Promise.all([
-    loadCandles(path.join(dir, names.primary)),
-    loadCandles(path.join(dir, names.higher)),
-  ]);
+  const name = candleFileFor('BTCUSDT', DEFAULT_BACKTEST_PARAMS.timeframe, from, to);
+  const candles = await loadCandles(path.join(dir, name));
 
-  if (candles5m === null || candles15m === null) {
+  if (candles === null) {
     return NextResponse.json(
       {
         error: `페이퍼가 커버한 구간(${from} ~ ${to})의 과거 캔들이 없다`,
@@ -64,8 +61,7 @@ export async function POST(): Promise<
   }
 
   const result = runBacktest({
-    candles5m,
-    candles15m,
+    candles,
     params: {
       ...DEFAULT_BACKTEST_PARAMS,
       account: DEFAULT_ACCOUNT,

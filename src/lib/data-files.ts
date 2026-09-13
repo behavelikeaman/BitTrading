@@ -15,16 +15,17 @@ export function candleFileName(
   return `${symbol.toLowerCase()}-${interval}-${from}-${to}.json`;
 }
 
-/** 한 타임프레임을 돌리는 데 필요한 두 파일(기준봉·상위봉) */
-export function candleFileNames(
+/**
+ * 한 타임프레임을 돌리는 데 필요한 파일. 기준봉 하나다.
+ *
+ * 예전에는 상위봉 파일까지 둘이 필요했다. 상위 프레임이 판정에서 빠지면서
+ * 백테스트는 기준봉 파일 하나만 있으면 돈다 (ADR-026).
+ */
+export function candleFileFor(
   symbol: string,
   timeframe: Timeframe,
   from: string,
   to: string,
-): { primary: string; higher: string } {
-  const spec = timeframeSpec(timeframe);
-  return {
-    primary: candleFileName(symbol, spec.binanceInterval, from, to),
-    higher: candleFileName(symbol, spec.binanceHigherInterval, from, to),
-  };
+): string {
+  return candleFileName(symbol, timeframeSpec(timeframe).binanceInterval, from, to);
 }

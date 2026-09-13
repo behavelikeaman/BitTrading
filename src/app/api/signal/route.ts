@@ -76,13 +76,12 @@ export async function GET(
   const spec = timeframeSpec(timeframe);
 
   try {
-    const [candles5m, candles15m, fundingRate] = await Promise.all([
+    const [candles, fundingRate] = await Promise.all([
       fetchRecentCandles({ bar: spec.primary, limit: 300 }),
-      fetchRecentCandles({ bar: spec.higher, limit: 200 }),
       fetchFundingRate().catch(() => 0),
     ]);
 
-    if (candles5m.length === 0) {
+    if (candles.length === 0) {
       return NextResponse.json(
         { error: `확정된 ${spec.label}이 없다` },
         { status: 502 },
@@ -91,12 +90,12 @@ export async function GET(
 
     // 시각은 서버가 주입한다. src/lib/은 Date.now()를 읽지 않는다.
     const signal = evaluateEntry(
-      { candles5m, candles15m, fundingRate, nowMs: Date.now() },
+      { candles, fundingRate, nowMs: Date.now() },
       guard,
       DEFAULT_ENTRY_CONFIG,
     );
 
-    const last = candles5m[candles5m.length - 1];
+    const last = candles[candles.length - 1];
 
     const plan =
       signal.conviction !== 'none' &&

@@ -21,16 +21,14 @@ const MAX_LIMIT = 300;
 const BAR_PARAM: Record<DeepcoinBar, string> = {
   '5m': '5m',
   '15m': '15m',
-  '1h': '1H',
 };
 
 const INTERVAL_MS: Record<DeepcoinBar, number> = {
   '5m': 300_000,
   '15m': 900_000,
-  '1h': 3_600_000,
 };
 
-export type DeepcoinBar = '5m' | '15m' | '1h';
+export type DeepcoinBar = '5m' | '15m';
 
 interface DeepcoinEnvelope<T> {
   code: string;

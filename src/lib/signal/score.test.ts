@@ -5,7 +5,6 @@ import {
   crossWithoutPosition,
   overextendedChaseLong,
   overextendedReversionShort,
-  risingHtf,
   trendPullbackLong,
 } from '@/lib/signal/fixtures';
 import type { SignalContext } from '@/types';
@@ -22,8 +21,7 @@ function withVolumeSpike(closes: number[]) {
 /** 2번 케이스 — 정배열 눌림목 재진입 롱 */
 function pullbackCtx(over: Partial<SignalContext> = {}): SignalContext {
   return {
-    candles5m: withVolumeSpike(trendPullbackLong()),
-    candles15m: candlesFromCloses(risingHtf()),
+    candles: withVolumeSpike(trendPullbackLong()),
     fundingRate: 0,
     nowMs: NOON_UTC,
     ...over,
@@ -33,8 +31,7 @@ function pullbackCtx(over: Partial<SignalContext> = {}): SignalContext {
 /** 1번 케이스 — 정배열 과이격 되돌림 숏 */
 function reversionCtx(over: Partial<SignalContext> = {}): SignalContext {
   return {
-    candles5m: withVolumeSpike(overextendedReversionShort()),
-    candles15m: candlesFromCloses(risingHtf()),
+    candles: withVolumeSpike(overextendedReversionShort()),
     fundingRate: 0,
     nowMs: NOON_UTC,
     ...over,
@@ -64,7 +61,7 @@ describe('scoreSignal — 셋업 분류가 방향을 정한다', () => {
   });
 
   it('교차가 없는 횡보는 방향이 없다', () => {
-    const c = pullbackCtx({ candles5m: candlesFromCloses(new Array(200).fill(100)) });
+    const c = pullbackCtx({ candles: candlesFromCloses(new Array(200).fill(100)) });
     expect(scoreSignal(c).direction).toBeNull();
   });
 });
@@ -79,7 +76,7 @@ describe('scoreSignal — 1단계 트리거 (ADR-025)', () => {
   });
 
   it('교차가 없으면 "진입 트리거 없음"을 사유로 남긴다', () => {
-    const c = pullbackCtx({ candles5m: candlesFromCloses(new Array(200).fill(100)) });
+    const c = pullbackCtx({ candles: candlesFromCloses(new Array(200).fill(100)) });
     const trigger = scoreSignal(c).trigger;
     expect(trigger.passed).toBe(false);
     expect(trigger.cross).toBeNull();
@@ -87,7 +84,7 @@ describe('scoreSignal — 1단계 트리거 (ADR-025)', () => {
   });
 
   it('과이격 추격은 교차가 있어도 트리거가 서지 않는다', () => {
-    const c = pullbackCtx({ candles5m: withVolumeSpike(overextendedChaseLong()) });
+    const c = pullbackCtx({ candles: withVolumeSpike(overextendedChaseLong()) });
     const trigger = scoreSignal(c).trigger;
     expect(trigger.cross).not.toBeNull();
     expect(trigger.passed).toBe(false);
@@ -107,7 +104,7 @@ describe('scoreSignal — 1단계 트리거 (ADR-025)', () => {
   it('종가가 자리를 만들지 못했으면 "가격 위치 미확인"이다', () => {
     // 교차는 났지만 밴드 돌파 셋업의 종가가 밴드 안에 머문 경우.
     const result = scoreSignal(
-      pullbackCtx({ candles5m: withVolumeSpike(crossWithoutPosition()) }),
+      pullbackCtx({ candles: withVolumeSpike(crossWithoutPosition()) }),
     );
     expect(result.trigger.cross).not.toBeNull();
     expect(result.trigger.positionConfirmed).toBe(false);
@@ -156,7 +153,7 @@ describe('scoreSignal — 2단계 점수는 3항목뿐이다 (ADR-025)', () => {
 
   it('이평선 배열 항목은 혼조일 때만 실패한다', () => {
     expect(item(pullbackCtx(), 'stackAlignment').passed).toBe(true);
-    const flat = pullbackCtx({ candles5m: candlesFromCloses(new Array(200).fill(100)) });
+    const flat = pullbackCtx({ candles: candlesFromCloses(new Array(200).fill(100)) });
     const alignment = item(flat, 'stackAlignment');
     expect(alignment.passed).toBe(false);
     expect(alignment.detail).toContain('혼조');
@@ -174,7 +171,7 @@ describe('scoreSignal — 2단계 점수는 3항목뿐이다 (ADR-025)', () => {
 
   it('volume: 거래량이 기준 미만이면 실패한다', () => {
     const c = pullbackCtx({
-      candles5m: candlesFromCloses(trendPullbackLong(), { volume: 1000, spread: 0.4 }),
+      candles: candlesFromCloses(trendPullbackLong(), { volume: 1000, spread: 0.4 }),
     });
     expect(item(c, 'volume').passed).toBe(false);
   });
@@ -260,7 +257,7 @@ describe('scoreSignal — 0단계 차단 게이트', () => {
 
   it('펀딩: 방향이 없으면 절대값으로 잰다', () => {
     const flat = pullbackCtx({
-      candles5m: candlesFromCloses(new Array(200).fill(100)),
+      candles: candlesFromCloses(new Array(200).fill(100)),
       fundingRate: -0.001,
     });
     const g = gate(flat, 'funding');
@@ -281,8 +278,8 @@ describe('scoreSignal — 확정봉 처리 (ADR-006)', () => {
         closed: false,
       },
     ];
-    const a = scoreSignal(pullbackCtx({ candles5m: closed }));
-    const b = scoreSignal(pullbackCtx({ candles5m: withOpen }));
+    const a = scoreSignal(pullbackCtx({ candles: closed }));
+    const b = scoreSignal(pullbackCtx({ candles: withOpen }));
     expect(b.direction).toBe(a.direction);
     expect(b.setup.kind).toBe(a.setup.kind);
     expect(b.indicators?.ema12).toBeCloseTo(a.indicators!.ema12, 10);
@@ -294,7 +291,7 @@ describe('scoreSignal — 데이터 부족', () => {
     // SMMA135가 확정되기 전에는 배열을 판정할 수 없다. 다른 지표가
     // 채워져 있어도 진입시키지 않는다.
     const short = candlesFromCloses(trendPullbackLong().slice(-60), { spread: 0.4 });
-    const result = scoreSignal(pullbackCtx({ candles5m: short }));
+    const result = scoreSignal(pullbackCtx({ candles: short }));
     expect(result.indicators).not.toBeNull();
     expect(result.indicators!.stack).toBeNull();
     expect(result.direction).toBeNull();
@@ -302,7 +299,7 @@ describe('scoreSignal — 데이터 부족', () => {
   });
 
   it(`짧은 캔들 배열에서도 예외 없이 ${SCORE_ITEM_COUNT}개 항목을 반환한다`, () => {
-    const c = pullbackCtx({ candles5m: candlesFromCloses([100, 101, 102]) });
+    const c = pullbackCtx({ candles: candlesFromCloses([100, 101, 102]) });
     const result = scoreSignal(c);
     expect(result.items).toHaveLength(SCORE_ITEM_COUNT);
     expect(result.gates).toHaveLength(GATE_COUNT);
@@ -311,7 +308,7 @@ describe('scoreSignal — 데이터 부족', () => {
   });
 
   it('빈 배열에서도 예외를 던지지 않는다', () => {
-    const result = scoreSignal(pullbackCtx({ candles5m: [], candles15m: [] }));
+    const result = scoreSignal(pullbackCtx({ candles: [] }));
     expect(result.items).toHaveLength(SCORE_ITEM_COUNT);
     expect(result.gates).toHaveLength(GATE_COUNT);
     expect(result.indicators).toBeNull();
