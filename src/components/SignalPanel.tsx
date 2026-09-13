@@ -19,8 +19,8 @@ interface Props {
 function Cell({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-xs font-medium text-neutral-400">{label}</div>
-      <div className="text-base font-semibold tabular-nums text-neutral-100">
+      <div className="t-label">{label}</div>
+      <div className="t-value">
         {value}
       </div>
     </div>
@@ -37,7 +37,7 @@ export function SignalPanel({
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
       <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold text-neutral-300">지표</h2>
+        <h2 className="t-section">지표</h2>
         <span className="text-xs text-neutral-400">
           확정봉 {formatTime(lastClosedAt)} {TIME_ZONE_LABEL} 기준
         </span>

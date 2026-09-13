@@ -44,10 +44,10 @@ function Stat({
           : 'text-neutral-200';
   return (
     <div className="rounded border border-neutral-800 bg-neutral-900/40 p-2">
-      <div className="text-xs font-medium text-neutral-400">{label}</div>
-      <div className={`text-base font-semibold ${color}`}>{value}</div>
+      <div className="t-label">{label}</div>
+      <div className={`t-value ${color}`}>{value}</div>
       {hint !== undefined && (
-        <div className="mt-0.5 text-[11px] text-neutral-500">{hint}</div>
+        <div className="mt-0.5 t-hint">{hint}</div>
       )}
     </div>
   );
@@ -72,7 +72,7 @@ function Breakdown({
 }) {
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
-      <h2 className="mb-1 text-sm font-semibold text-neutral-300">{title}</h2>
+      <h2 className="mb-1 t-section">{title}</h2>
       <p className="mb-3 text-xs text-neutral-400">{note}</p>
       {rows.length === 0 ? (
         <p className="text-sm text-neutral-400">트레이드가 없다</p>
@@ -207,38 +207,38 @@ export function BacktestReport({
             : 'border-neutral-800 bg-neutral-950'
         }`}
       >
-        <h2 className="mb-3 text-sm font-semibold text-neutral-300">
+        <h2 className="mb-3 t-section">
           실제 승률 vs 필요 승률
         </h2>
         <div className="flex flex-wrap items-baseline gap-6">
           <div>
-            <div className="text-xs font-medium text-neutral-400">
+            <div className="t-label">
               실제 승률
             </div>
             <div className="text-3xl font-bold">{formatPct(result.winRate)}</div>
           </div>
-          <div className="text-2xl text-neutral-500">vs</div>
+          <div className="t-label">vs</div>
           <div>
-            <div className="text-xs font-medium text-neutral-400">
+            <div className="t-label">
               필요 승률 (실측)
             </div>
             <div className="text-3xl font-bold text-neutral-200">
               {formatPct(required)}
             </div>
-            <div className="mt-0.5 text-[11px] text-neutral-500">
+            <div className="mt-0.5 t-hint">
               평균 승 {formatUsd(result.averageWin)} / 평균 패{' '}
               {formatUsd(result.averageLoss)} = 실측 손익비{' '}
               {formatProfitFactor(result.payoffRatio, result.totalTrades > 0)}
             </div>
           </div>
           <div>
-            <div className="text-xs font-medium text-neutral-500">
+            <div className="t-label">
               손익분기 승률 (이론)
             </div>
-            <div className="text-xl font-semibold text-neutral-500">
+            <div className="text-2xl font-semibold text-neutral-500">
               {formatPct(breakEvenWinRate)}
             </div>
-            <div className="mt-0.5 text-[11px] text-neutral-600">
+            <div className="mt-0.5 t-hint">
               전량 체결 후 목표({targetRMultiple}R) 도달 가정
             </div>
           </div>
@@ -374,7 +374,7 @@ export function BacktestReport({
       />
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
-        <h2 className="mb-2 text-sm font-semibold text-neutral-300">
+        <h2 className="mb-2 t-section">
           트레이드 ({result.trades.length}건)
         </h2>
         <div className="max-h-96 overflow-auto">

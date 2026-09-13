@@ -60,7 +60,7 @@ function StopScenarioTable({
 
   return (
     <div className="mt-3 border-t border-neutral-800 pt-3">
-      <h3 className="text-sm font-semibold text-neutral-300">
+      <h3 className="t-section">
         손절을 어디 두느냐가 필요 승률을 정한다
       </h3>
       <p className="mt-0.5 mb-2 text-xs text-neutral-400">
@@ -90,10 +90,10 @@ function StopScenarioTable({
                   <td className="py-1.5 text-neutral-200">
                     {row.label}
                     {isCurrent && (
-                      <span className="ml-1 text-[11px] text-neutral-400">(현재 설정)</span>
+                      <span className="ml-1 text-xs text-neutral-400">(현재 설정)</span>
                     )}
                     {row.beyondLiquidation && row.atrMultiple !== null && (
-                      <span className="ml-1 text-[11px] text-[var(--color-warn)]">
+                      <span className="ml-1 text-xs text-[var(--color-warn)]">
                         청산이 먼저
                       </span>
                     )}
@@ -220,7 +220,7 @@ export function OrderTicket({
   if (plan === null) {
     return (
       <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-300">진입 불가</h2>
+        <h2 className="mb-3 t-section">진입 불가</h2>
         <SetupBanner setup={signal.setup} />
         {signal.blockers.length > 0 ? (
           <ul className="space-y-1">
@@ -246,7 +246,7 @@ export function OrderTicket({
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-neutral-300">주문 티켓</h2>
+        <h2 className="t-section">주문 티켓</h2>
         <span
           className={`rounded px-2 py-0.5 text-sm font-bold ${
             isLong

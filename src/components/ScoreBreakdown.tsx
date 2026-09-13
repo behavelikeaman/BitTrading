@@ -81,12 +81,12 @@ function Row({
       </td>
       <td className="w-36 py-1.5 align-top font-medium text-neutral-100">
         {label}
-        <div className="text-[10px] font-normal text-neutral-600">{weight}</div>
+        <div className="t-hint">{weight}</div>
       </td>
       <td className="py-1.5 align-top text-xs text-neutral-400">
         {detail}
         {showGuide && guide !== undefined && (
-          <div className="mt-1 space-y-0.5 border-l border-neutral-800 pl-2 text-[11px] leading-relaxed">
+          <div className="mt-1 space-y-0.5 border-l border-neutral-800 pl-2 text-xs leading-relaxed">
             <p className="text-neutral-500">
               <span className="text-neutral-400">왜 보는가 </span>
               {guide.why}
@@ -119,12 +119,12 @@ export function ScoreBreakdown({ signal }: Props) {
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-neutral-300">진입 판정</h2>
+        <h2 className="t-section">진입 판정</h2>
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => setShowGuide((v) => !v)}
-            className="rounded border border-neutral-700 px-2 py-0.5 text-[11px] text-neutral-400 hover:bg-neutral-900"
+            className="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-400 hover:bg-neutral-900"
           >
             {showGuide ? '설명 접기' : '설명 보기'}
           </button>
@@ -134,7 +134,7 @@ export function ScoreBreakdown({ signal }: Props) {
         </div>
       </div>
 
-      <div className="mb-3 rounded border border-neutral-800 bg-neutral-900/40 p-2 text-[11px] leading-relaxed text-neutral-400">
+      <div className="mb-3 rounded border border-neutral-800 bg-neutral-900/40 p-2 text-xs leading-relaxed text-neutral-400">
         <p>
           판정은 <span className="font-semibold text-neutral-200">세 단계</span>다 —
           0단계 차단 조건(하나라도 걸리면 끝) · 1단계 트리거(없으면 끝) · 2단계 점수
@@ -172,12 +172,12 @@ export function ScoreBreakdown({ signal }: Props) {
           ))}
         </tbody>
       </table>
-      <p className="mt-1 px-2 text-[11px] text-neutral-500">
+      <p className="mt-1 px-2 t-hint">
         여기에 더해 데이터 부족 · 이상 변동성(ATR 급등) · 연속 손실 한도 · 일일 손실
         한도 · 지표 발표 블랙아웃도 같은 0단계에서 막는다.
       </p>
       {otherBlockers.length > 0 && (
-        <p className="mt-1 px-2 text-[11px] text-[var(--color-warn)]">
+        <p className="mt-1 px-2 text-xs text-[var(--color-warn)]">
           현재 걸린 사유: {otherBlockers.join(' · ')}
         </p>
       )}
@@ -221,7 +221,7 @@ export function ScoreBreakdown({ signal }: Props) {
           ))}
         </tbody>
       </table>
-      <p className="mt-2 px-2 text-[11px] leading-relaxed text-neutral-500">
+      <p className="mt-2 px-2 t-hint">
         가중치는 전부 같다 — 어느 조건이 얼마나 중요한지 아직 데이터로 모르기 때문이다.
         같은 항목이라도 셋업(눌림목 재진입 · 과이격 되돌림 · 밴드 돌파)에 따라 통과
         조건이 달라진다 (ADR-022). 이 채점 구성 자체는 아직 검증되지 않았다.

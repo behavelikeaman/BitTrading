@@ -47,10 +47,10 @@ function Stat({
           : 'text-neutral-200';
   return (
     <div className="rounded border border-neutral-800 bg-neutral-900/40 p-2">
-      <div className="text-xs font-medium text-neutral-400">{label}</div>
-      <div className={`text-base font-semibold tabular-nums ${color}`}>{value}</div>
+      <div className="t-label">{label}</div>
+      <div className={`t-value ${color}`}>{value}</div>
       {hint !== undefined && (
-        <div className="mt-0.5 text-[11px] text-neutral-500">{hint}</div>
+        <div className="mt-0.5 t-hint">{hint}</div>
       )}
     </div>
   );
@@ -132,7 +132,7 @@ export default function PaperPage() {
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-lg font-bold">페이퍼 트레이딩</h1>
-          <p className="text-xs text-neutral-500">
+          <p className="t-hint">
             백테스트와 같은 판단을 실시간에서도 내리는지 검증한다
           </p>
         </div>
@@ -162,7 +162,7 @@ export default function PaperPage() {
       {data !== null && data.state === null && (
         <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
           <p className="text-sm text-neutral-300">아직 시작하지 않았다.</p>
-          <p className="mt-2 text-xs text-neutral-500">로컬 터미널에서 티커를 띄운다:</p>
+          <p className="mt-2 t-hint">로컬 터미널에서 티커를 띄운다:</p>
           <code className="mt-1 block select-all rounded bg-neutral-900 px-2 py-1.5 text-xs text-neutral-200">
             npm run paper
           </code>
@@ -188,7 +188,7 @@ export default function PaperPage() {
         <>
           <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-neutral-300">열린 포지션</h2>
+              <h2 className="t-section">열린 포지션</h2>
               <span className={`text-xs ${data.running ? 'text-[var(--color-long)]' : 'text-neutral-500'}`}>
                 {data.running ? '티커 동작 중' : '티커 중단'}
               </span>
@@ -240,7 +240,7 @@ export default function PaperPage() {
             }`}
           >
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-neutral-300">
+              <h2 className="t-section">
                 괴리 검사 — 백테스트와 같은 판단을 내렸는가
               </h2>
               <button
@@ -276,7 +276,7 @@ export default function PaperPage() {
                   >
                     불일치 {divergence.divergences.length}건
                   </span>
-                  <span className="text-xs text-neutral-500">
+                  <span className="t-hint">
                     {divergence.from} ~ {divergence.to} · 페이퍼 {divergence.paperTrades}건 vs
                     백테스트 {divergence.backtestTrades}건 · 짝 일치율{' '}
                     {formatPct(divergence.matchRate)}
@@ -324,7 +324,7 @@ export default function PaperPage() {
 
           {/* 승률은 신뢰구간과 함께가 아니면 없는 확신을 만든다 (ADR-020) */}
           <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
-            <h2 className="mb-3 text-sm font-semibold text-neutral-300">승률</h2>
+            <h2 className="mb-3 t-section">승률</h2>
             {interval === null ? (
               <p className="text-sm text-neutral-500">트레이드가 아직 없다</p>
             ) : (
@@ -386,7 +386,7 @@ export default function PaperPage() {
 
           <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
             <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-neutral-300">
+              <h2 className="t-section">
                 매매 일지 ({data.journal.length}건)
               </h2>
               <button
@@ -428,7 +428,7 @@ export default function PaperPage() {
                             ? 'text-[var(--color-long)]'
                             : (e.trade?.direction ?? e.signal?.direction) === 'short'
                               ? 'text-[var(--color-short)]'
-                              : 'text-neutral-600'
+                              : 'text-neutral-500'
                         }
                       >
                         {(e.trade?.direction ?? e.signal?.direction) === 'long'

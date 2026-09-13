@@ -52,7 +52,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-xs font-medium text-neutral-400">
+      <span className="t-label">
         {label}
       </span>
       <div className="flex items-center gap-1">
@@ -72,7 +72,7 @@ function Field({
         )}
       </div>
       {hint !== undefined && (
-        <span className="text-[11px] text-neutral-500">{hint}</span>
+        <span className="t-hint">{hint}</span>
       )}
     </label>
   );
@@ -131,7 +131,7 @@ export function SettingsPanel({
 
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
-      <h2 className="mb-3 text-sm font-semibold text-neutral-300">설정</h2>
+      <h2 className="mb-3 t-section">설정</h2>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Field label="자본금" value={settings.equity} step={100} onChange={set('equity')} suffix="USDT" />
         <Field label="레버리지" value={settings.leverage} step={1} onChange={set('leverage')} suffix="x" />

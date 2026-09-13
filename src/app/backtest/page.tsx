@@ -116,7 +116,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-[10px] uppercase tracking-wide text-neutral-500">
+      <span className="t-label">
         {label}
       </span>
       <input
@@ -225,7 +225,7 @@ export default function BacktestPage() {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold">백테스트</h1>
-          <p className="text-xs text-neutral-500">
+          <p className="t-hint">
             이 규칙이 과거에 실제로 돈이 됐는지 확인한다
           </p>
         </div>
@@ -236,12 +236,12 @@ export default function BacktestPage() {
       </header>
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-300">파라미터</h2>
+        <h2 className="mb-3 t-section">파라미터</h2>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Field label="시작일" type="date" value={params.from} onChange={(v) => setParams({ ...params, from: v })} />
           <Field label="종료일" type="date" value={params.to} onChange={(v) => setParams({ ...params, to: v })} />
           <label className="block">
-            <span className="text-[10px] uppercase tracking-wide text-neutral-500">
+            <span className="t-label">
               기준 봉
             </span>
             <select
@@ -274,7 +274,7 @@ export default function BacktestPage() {
           {/* 점수로 크기를 바꾸는 것은 아직 근거가 없다 (ADR-025). 기본은 끔이고,
               켠 백테스트와 비교해 볼 수 있게만 남겨둔다. */}
           <label className="block">
-            <span className="text-[10px] uppercase tracking-wide text-neutral-500">
+            <span className="t-label">
               점수 사이징
             </span>
             <select
@@ -301,7 +301,7 @@ export default function BacktestPage() {
             onChange={num('mediumConvictionScore')}
           />
           <label className="block">
-            <span className="text-[10px] uppercase tracking-wide text-neutral-500">
+            <span className="t-label">
               진입 방식
             </span>
             <select
@@ -316,7 +316,7 @@ export default function BacktestPage() {
             </select>
           </label>
           <label className="block">
-            <span className="text-[10px] uppercase tracking-wide text-neutral-500">
+            <span className="t-label">
               물타기
             </span>
             <select
@@ -334,7 +334,7 @@ export default function BacktestPage() {
           <Field label="최대 보유 봉" value={params.maxHoldBars} step={1} onChange={num('maxHoldBars')} />
         </div>
 
-        <p className="mt-3 text-xs text-neutral-500">
+        <p className="mt-3 t-hint">
           기준 {timeframeSpec(params.timeframe).label} · 이론 손익분기 승률{' '}
           <span className="text-neutral-200">{formatPct(breakEven)}</span> · 왕복 총마찰{' '}
           {formatPct((params.feeRatePerSide + params.slippageRatePerSide) * 2, 4)} (증거금 대비{' '}
@@ -387,7 +387,7 @@ export default function BacktestPage() {
 
       {compare !== null && (
         <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
-          <h2 className="mb-3 text-sm font-semibold text-neutral-300">
+          <h2 className="mb-3 t-section">
             {compare.title}
           </h2>
           <table className="w-full text-sm [&_td]:px-2 [&_th]:px-2">
@@ -446,8 +446,8 @@ export default function BacktestPage() {
               ))}
             </tbody>
           </table>
-          <p className="mt-3 text-xs text-neutral-500">{compare.note}</p>
-          <p className="mt-2 text-xs text-neutral-500">
+          <p className="mt-3 t-hint">{compare.note}</p>
+          <p className="mt-2 t-hint">
             이론 손익비는 목표 {params.targetRMultiple}R이다. 실측 손익비가 그보다
             한참 낮으면 화면의 이론 손익분기 승률을 믿고 매매 여부를 판단할 수 없다.
           </p>

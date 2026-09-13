@@ -252,7 +252,7 @@ export default function Home() {
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-neutral-300">레짐 해설</h2>
+          <h2 className="t-section">레짐 해설</h2>
           <button
             type="button"
             onClick={() => void requestCommentary()}
@@ -276,7 +276,7 @@ export default function Home() {
         price={data?.lastPrice ?? null}
       />
 
-      <footer className="pb-8 text-center text-xs text-neutral-500">
+      <footer className="pb-8 text-center t-hint">
         이 도구는 매매 판단을 보조할 뿐 수익을 보장하지 않는다. 레버리지 거래는 원금 전액을 잃을 수 있다.
       </footer>
     </main>

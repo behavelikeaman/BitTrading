@@ -25,3 +25,52 @@ body {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+
+/*
+ * 타이포그래피 계단 — 모든 화면이 이 여섯 단계만 쓴다.
+ *
+ * 같은 역할의 글자를 화면마다 다르게 정하면(대시보드 라벨 12px/400,
+ * 백테스트 라벨 10px 대문자/500) 읽는 사람은 그 차이를 의미로 착각한다.
+ * 크기·색을 개별 화면에서 새로 정하지 말고 여기에만 둔다.
+ *
+ * @layer components 안에 두는 이유: Tailwind 유틸리티(utilities 레이어)가
+ * 더 나중이라, 개별 요소에서 색만 덮어쓰는 것(예: 손익 빨강/초록)이 그대로 된다.
+ */
+@layer components {
+  /* 페이지 제목 */
+  .t-page {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #f5f5f5;
+  }
+  /* 카드·섹션 제목 */
+  .t-section {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #e5e5e5;
+  }
+  /* 본문 */
+  .t-body {
+    font-size: 0.875rem;
+    color: #d4d4d4;
+  }
+  /* 항목 이름 (입력 라벨, 표 헤더, 카드 라벨) */
+  .t-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #a3a3a3;
+  }
+  /* 보조 설명 — 읽지 않아도 판단에 지장 없는 것만 */
+  .t-hint {
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: #737373;
+  }
+  /* 숫자 값 */
+  .t-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fafafa;
+    font-variant-numeric: tabular-nums;
+  }
+}
