@@ -12,6 +12,7 @@
   - 처음 손절가 = 투매 저점의 1% 아래
   - 추적 손절 = 매일 09시, 최근 7일 최저가의 1% 아래가 더 높으면 그쪽으로 올림
   - 손절되면 다음 신호에 재진입
+별첨: 저장소의 views.json에 있는 외부 의견을 메일 끝에 붙입니다(만료일이 지나면 자동으로 빠짐, 판정에는 쓰지 않음).
 차트: matplotlib이 있으면 추세·박스 차트 PNG를 만들어 메일에 인라인 첨부합니다. 없으면 글로만 보냅니다.
 """
 import json, re, html, time, subprocess, sys, os, datetime as dt
@@ -288,6 +289,10 @@ def collect(wd):
     try: out["liqmap"] = liq_map()
     except Exception as e: err.append(f"청산 구간: {e}")
 
+    # 8) 별첨: 외부 전문가 의견 (저장소의 views.json, 판정에는 쓰지 않음)
+    try: out["views"] = load_views(now)
+    except Exception as e: err.append(f"외부 의견 파일: {e}")
+
     os.makedirs(wd, exist_ok=True)
     err += make_charts(wd, out)
     out["charts"] = {k: os.path.exists(os.path.join(wd, f"chart_{k}.png")) for k in ("trend", "box")}
@@ -298,6 +303,28 @@ def collect(wd):
     open(os.path.join(wd, "draft.txt"), "w").write(body)
     open(os.path.join(wd, "draft.html"), "w").write(doc)
     print("SUBJECT:", subject); print(body); print("\n--- state.json ---"); print(json.dumps(out, ensure_ascii=False))
+
+def load_views(now):
+    """저장소의 views.json에서 아직 유효한 외부 의견만 고른다."""
+    fp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "views.json")
+    if not os.path.exists(fp): return []
+    keep = []
+    for v in json.load(open(fp)).get("views", []):
+        t = dt.datetime.strptime(v["posted_kst"], "%Y-%m-%d %H:%M").replace(tzinfo=KST)
+        age = (now - t).total_seconds() / 86400
+        if age <= v.get("expires_days", 21): keep.append(dict(v, age_days=age))
+    return keep
+
+def view_levels(v, px):
+    """의견 속 가격대마다 기준 가격(마지막 4시간 종가)이 위·안·아래 중 어디인지."""
+    rows = []
+    for lv in v.get("levels", []):
+        pos = "above" if px > lv["hi"] else "below" if px < lv["lo"] else "inside"
+        ref = lv["hi"] if pos == "above" else lv["lo"]
+        rows.append(dict(lv, pos=pos, msg=lv[pos], gap=px/ref-1))
+    return rows
+
+def ago(d): return f"{d*24:.0f}시간 전" if d < 1 else f"{d:.0f}일 전"
 
 def mark(b): return "✓" if b else "✗"
 def usd(x): return f"${x:,.0f}"
@@ -480,7 +507,17 @@ def compose(o):
     if bxl: B += ["■ " + bx_title] + bxl + [""]
     if lml: B += ["■ " + lm_title] + lml + [""]
     if h4: B += ["■ 최근 4시간 봉 (OKX, 마감 시각 KST)"] + h4 + [""]
-    B += ["■ 보조 지표 (진입 판정에는 쓰지 않음)"] + [f"{mark(ok)} {t}" for ok, t in aux] + ["", "{{해석}}", "", "■ 계획 요약"] + plan + ["", "■ 참고"] + ref + ["", foot]
+    B += ["■ 보조 지표 (진입 판정에는 쓰지 않음)"] + [f"{mark(ok)} {t}" for ok, t in aux] + ["", "{{해석}}", "", "■ 계획 요약"] + plan + ["", "■ 참고"] + ref + [""]
+    views = o.get("views") or []
+    vpx = o["h4"][0]["close"] if o.get("h4") else price
+    vtime = o["h4"][0]["close_time"] if o.get("h4") else "현재"
+    for n, v in enumerate(views, 1):
+        B += [f"■ 별첨 {n}. 외부 의견: {v['author']} ({v['posted_kst'][5:].replace('-', '/')} 작성, {ago(v['age_days'])}) · 참고용, 검증되지 않은 의견"]
+        B += [f"- {x}" for x in v.get("summary", [])]
+        B += [f"  가격대 점검 (마지막 4시간 종가 {usd(vpx)}, {vtime} 마감 기준):"]
+        B += [f"  {'▲' if r['pos'] == 'above' else '▼' if r['pos'] == 'below' else '●'} {r['name']}: {r['msg']} ({pc(r['gap'])})" for r in view_levels(v, vpx)]
+        B += ["  우리 규칙과의 관계:"] + [f"  - {x}" for x in v.get("our_take", [])] + [f"  원문: {v['url']}", ""]
+    B += [foot]
     text = "\n".join(B)
     # ── HTML ──
     fg, bg, bd = KIND[kind]
@@ -559,6 +596,24 @@ def compose(o):
     H.append(card("보조 지표 (진입 판정에는 쓰지 않음)", checks(aux)))
     H.append(card("계획 요약", ul(plan, 13)))
     H.append(card("참고", ul(ref, 12, "#57606a"), bg="#fafbfc"))
+    for n, v in enumerate(views, 1):
+        sty = {"above": ("#0f7b3f", "#e6f4ea", "▲ 위"), "below": ("#b3261e", "#fdecea", "▼ 아래"), "inside": ("#8a5a00", "#fff4d6", "● 안")}
+        rows = ""; placed = False
+        for r in view_levels(v, vpx):
+            if not placed and vpx > r["hi"]:
+                rows += (f'<tr><td colspan="2" style="padding:6px 0;{FONT};font-size:13px;font-weight:700;color:#3b4bc4;border-top:2px dashed #6e7ff3;border-bottom:2px dashed #6e7ff3">'
+                         f'지금 {usd(vpx)} ({esc(vtime)} 마감 4시간 종가)</td></tr>'); placed = True
+            c, bgc, lab = sty[r["pos"]]
+            rows += (f'<tr><td valign="top" style="padding:6px 8px 6px 0;{FONT};white-space:nowrap"><span style="display:inline-block;padding:2px 8px;border-radius:999px;background:{bgc};color:{c};font-weight:700;font-size:12px">{lab}</span></td>'
+                     f'<td style="padding:6px 0;{FONT};font-size:13px;color:#24292f;line-height:1.5"><b>{esc(r["name"])}</b> <span style="color:#57606a">({pc(r["gap"])})</span><br>{esc(r["msg"])}</td></tr>')
+        if not placed:
+            rows += f'<tr><td colspan="2" style="padding:6px 0;{FONT};font-size:13px;font-weight:700;color:#3b4bc4;border-top:2px dashed #6e7ff3">지금 {usd(vpx)} ({esc(vtime)} 마감 4시간 종가)</td></tr>'
+        vin = (f'<div style="font-size:12px;color:#57606a;margin:0 0 8px">{esc(v["posted_kst"][5:].replace("-", "/"))} 작성 · {ago(v["age_days"])} · 참고용이며 검증되지 않은 의견입니다. 진입 판정에는 쓰지 않습니다.</div>'
+               + ul(v.get("summary", []), 14)
+               + f'<div style="font-size:12px;font-weight:700;color:#57606a;margin:12px 0 2px">가격대 점검</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0">{rows}</table>'
+               + f'<div style="font-size:12px;font-weight:700;color:#57606a;margin:12px 0 4px">우리 규칙과의 관계</div>' + ul(v.get("our_take", []), 13, "#24292f")
+               + f'<div style="font-size:12px;margin-top:8px"><a href="{esc(v["url"])}" style="color:#3b4bc4">원문 보기</a></div>')
+        H.append(card(f"별첨 {n}. 외부 의견 · {esc(v['author'])}", vin, border="#c9b8f0", bg="#faf8ff", tcolor="#6b3fc4"))
     H.append(f'<div style="{FONT};font-size:12px;color:#8b949e;text-align:center;margin:4px 0 0">{esc(foot)}</div>')
     doc = (f'<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
            f'<body style="margin:0;padding:0;background:#f3f4f6"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6"><tr><td align="center" style="padding:16px 10px">'
