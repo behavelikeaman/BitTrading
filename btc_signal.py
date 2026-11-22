@@ -94,13 +94,11 @@ def liq_map(pages=8):
 
 def make_charts(wd, o):
     """추세·박스 차트 PNG 2장. matplotlib이 없으면 건너뜀 (메일은 글로만 나감)."""
+    # 작업폴더 옆 pylib(pip --target 설치)이 있으면 시스템 경로보다 먼저 쓴다. 일부 컨테이너의 시스템 PIL이 깨져 있기 때문.
+    alt = os.path.join(os.path.dirname(os.path.abspath(wd)), "pylib")
+    if os.path.isdir(alt) and alt not in sys.path: sys.path.insert(0, alt)
     try:
-        try: import matplotlib
-        except ImportError:                                   # -I 모드는 사용자 site를 무시하므로, 작업폴더 옆 pylib에 설치된 경우를 지원
-            alt = os.path.join(os.path.dirname(os.path.abspath(wd)), "pylib")
-            if os.path.isdir(alt): sys.path.append(alt)
-            import matplotlib
-        matplotlib.use("Agg"); import matplotlib.pyplot as plt; import matplotlib.dates as mdates
+        import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt; import matplotlib.dates as mdates
     except Exception as e:
         return [f"차트: matplotlib 없음 ({e}). 설치 상태를 확인하세요"]
     errs = []; sd, sh, bx = o.get("series_d"), o.get("series_h"), o.get("box")
