@@ -12,6 +12,7 @@
   - 처음 손절가 = 투매 저점의 1% 아래
   - 추적 손절 = 매일 09시, 최근 7일 최저가의 1% 아래가 더 높으면 그쪽으로 올림
   - 손절되면 다음 신호에 재진입
+차트: matplotlib이 있으면 추세·박스 차트 PNG를 만들어 메일에 인라인 첨부합니다. 없으면 글로만 보냅니다.
 """
 import json, re, html, time, subprocess, sys, os, datetime as dt
 
@@ -91,6 +92,61 @@ def liq_map(pages=8):
     return dict(price=price, hours=round((ts[-1] - ts[0])/3.6e6), above=bands(shorts, 1), below=bands(longs, -1),
                 above5=tot(shorts, 0, .05), below5=tot(longs, -.05, 0), above10=tot(shorts, 0, .10), below10=tot(longs, -.10, 0))
 
+def make_charts(wd, o):
+    """추세·박스 차트 PNG 2장. matplotlib이 없으면 건너뜀 (메일은 글로만 나감)."""
+    try:
+        import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt; import matplotlib.dates as mdates
+    except Exception as e:
+        return [f"차트: matplotlib 없음 ({e})"]
+    errs = []; sd, sh, bx = o.get("series_d"), o.get("series_h"), o.get("box")
+    G, R, B, GR, Y = "#0f7b3f", "#b3261e", "#3b4bc4", "#8b949e", "#e0a100"
+    def style(ax, title):
+        ax.set_title(title, loc="left", fontsize=10, color="#24292f", pad=6)
+        ax.grid(True, color="#eceff3", lw=0.8); ax.set_axisbelow(True)
+        for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+        for sp in ("left", "bottom"): ax.spines[sp].set_color("#d8dee4")
+        ax.tick_params(colors="#57606a", labelsize=8, length=0)
+        ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v/1000:.0f}k"))
+    # ── 차트 1: 추세 (위 일봉 120일, 아래 4시간 25일) ──
+    try:
+        if sd and sh:
+            fig, (a1, a2) = plt.subplots(2, 1, figsize=(7.6, 5.6), dpi=150, gridspec_kw=dict(hspace=0.45))
+            td = [dt.datetime.strptime(x, "%Y-%m-%d") for x in sd["t"]]
+            a1.plot(td, sd["c"], color="#24292f", lw=1.3, label="Close"); a1.plot(td, sd["s20"], color=B, lw=1.1, label="SMA20"); a1.plot(td, sd["s50"], color=Y, lw=1.1, label="SMA50")
+            a1.scatter([td[-1]], [sd["c"][-1]], color="#24292f", s=14, zorder=5)
+            a1.annotate(f"{sd['c'][-1]:,.0f}", (td[-1], sd["c"][-1]), xytext=(4, 0), textcoords="offset points", fontsize=8, va="center")
+            tm = o.get("trend_mid", {}).get("dir", ""); style(a1, f"Mid-term (daily, 120d)  {('UP' if tm=='상승' else 'DOWN' if tm=='하락' else 'NEUTRAL')}")
+            a1.legend(loc="upper left", fontsize=7, frameon=False, ncol=3); a1.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
+            th = [dt.datetime.strptime(x, "%Y-%m-%d %H:%M") for x in sh["t"]]
+            a2.plot(th, sh["c"], color="#24292f", lw=1.2, label="4H close"); a2.plot(th, sh["e12"], color=G, lw=1.1, label="EMA12"); a2.plot(th, sh["e48"], color=R, lw=1.1, label="EMA48")
+            a2.scatter([th[-1]], [sh["c"][-1]], color="#24292f", s=14, zorder=5)
+            a2.annotate(f"{sh['c'][-1]:,.0f}", (th[-1], sh["c"][-1]), xytext=(4, 0), textcoords="offset points", fontsize=8, va="center")
+            tsd = o.get("trend_short", {}).get("dir", ""); style(a2, f"Short-term (4H, 25d)  {('UP' if tsd=='상승' else 'DOWN' if tsd=='하락' else 'NEUTRAL')}")
+            a2.legend(loc="lower left", fontsize=7, frameon=False, ncol=3); a2.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d"))
+            fig.savefig(os.path.join(wd, "chart_trend.png"), bbox_inches="tight", facecolor="white"); plt.close(fig)
+    except Exception as e: errs.append(f"추세 차트: {e}")
+    # ── 차트 2: 박스 (4시간 25일 + 20일 고점·저점·중간, 하단 2% 구간, 손절선) ──
+    try:
+        if sh and bx:
+            fig, ax = plt.subplots(figsize=(7.6, 3.6), dpi=150)
+            th = [dt.datetime.strptime(x, "%Y-%m-%d %H:%M") for x in sh["t"]]
+            ax.fill_between(th, sh["l"], sh["h"], color="#d8dee4", alpha=0.6, lw=0, label="4H range")
+            ax.plot(th, sh["c"], color="#24292f", lw=1.2, label="4H close")
+            x0, x1 = th[0], th[-1]
+            ax.hlines([bx["hi"], bx["lo"]], x0, x1, colors=[R, G], linestyles="--", lw=1.1)
+            ax.hlines([bx["mid"]], x0, x1, colors=[GR], linestyles=":", lw=1.0)
+            ax.axhspan(bx["lo"], bx["lo"]*(1+BOX_ZONE), color=G, alpha=0.12, lw=0, label="Long zone (low +2%)")
+            ax.hlines([bx["lo"]*(1-BOX_STOP)], x0, x1, colors=[R], linestyles="-", lw=0.9, alpha=0.7)
+            for y, txt, c in [(bx["hi"], f"High {bx['hi']:,.0f}", R), (bx["mid"], f"Mid {bx['mid']:,.0f}", GR), (bx["lo"], f"Low {bx['lo']:,.0f}", G), (bx["lo"]*(1-BOX_STOP), f"Stop {bx['lo']*(1-BOX_STOP):,.0f}", R)]:
+                ax.annotate(txt, (x1, y), xytext=(4, 0), textcoords="offset points", fontsize=7.5, color=c, va="center")
+            ax.scatter([th[-1]], [sh["c"][-1]], color="#24292f", s=14, zorder=5)
+            lab = (f"BOX  {bx['w']*100:.1f}% wide, price at {bx['pos']*100:.0f}%" if bx["valid"] else f"NOT A BOX  (20d range {bx['w']*100:.0f}% wide)")
+            style(ax, f"Box (20-day high/low, 4H)  {lab}"); ax.legend(loc="center left", fontsize=7, frameon=False)
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d")); ax.set_xlim(x0, x1 + (x1-x0)*0.14)
+            fig.savefig(os.path.join(wd, "chart_box.png"), bbox_inches="tight", facecolor="white"); plt.close(fig)
+    except Exception as e: errs.append(f"박스 차트: {e}")
+    return errs
+
 def collect(wd):
     load_config(wd)
     now = dt.datetime.now(KST); out = {"run_at_kst": now.strftime("%Y-%m-%d %H:%M")}; err = []
@@ -114,6 +170,8 @@ def collect(wd):
         mt_dir = "상승" if C[i] > sma50 and sma20 > sma50 else "하락" if C[i] < sma50 and sma20 < sma50 else "중립"
         out["trend_mid"] = dict(dir=mt_dir, sma50=sma50, sma20=sma20, chg30=C[i]/C[i-30]-1, dd90=C[i]/max(H[i-89:i+1])-1,
                                 hh=("높아짐" if hh20 > hh20p else "낮아짐"), ll=("높아짐" if ll20 > ll20p else "낮아짐"), hh20=hh20, ll20=ll20)
+        out["series_d"] = dict(t=[dt.datetime.fromtimestamp(x+86400, KST).strftime("%Y-%m-%d") for x in ts[-120:]], c=C[-120:], h=H[-120:], l=L[-120:],
+                               s20=[sum(C[j-19:j+1])/20 for j in range(i-119, i+1)], s50=[sum(C[j-49:j+1])/50 for j in range(i-119, i+1)])
         out["daily"] = dict(close_time=dt.datetime.fromtimestamp(ts[i]+86400, KST).strftime("%m/%d %H:%M"),
                             close=C[i], bar_low=L[i], bar_high=H[i], low_bar=bar(ts[s["lo"]]), streak=streak,
                             high90=max(H[i-89:i+1]), trail_low=trail_low, trail_stop=trail_low*0.99,
@@ -166,6 +224,8 @@ def collect(wd):
         e12, e48 = ema(hC, 12), ema(hC, 48)
         chg5 = hC[i]/hC[i-30] - 1 if i >= 30 else 0
         st_dir = "상승" if e12[i] > e48[i] and hC[i] > e48[i] else "하락" if e12[i] < e48[i] and hC[i] < e48[i] else "중립"
+        out["series_h"] = dict(t=[dt.datetime.fromtimestamp(int(r[0])/1000 + 14400, KST).strftime("%Y-%m-%d %H:%M") for r in b[-150:]],
+                               c=hC[-150:], h=hH[-150:], l=hL[-150:], e12=e12[-150:], e48=e48[-150:])
         out["trend_short"] = dict(dir=st_dir, e12=e12[i], e48=e48[i], chg5=chg5,
                                   cross_days=next((k/6 for k in range(1, min(i, 200)) if (e12[i-k] > e48[i-k]) != (e12[i] > e48[i])), None))
     except Exception as e: err.append(f"4시간봉: {e}")
@@ -225,10 +285,12 @@ def collect(wd):
     try: out["liqmap"] = liq_map()
     except Exception as e: err.append(f"청산 구간: {e}")
 
+    os.makedirs(wd, exist_ok=True)
+    err += make_charts(wd, out)
+    out["charts"] = {k: os.path.exists(os.path.join(wd, f"chart_{k}.png")) for k in ("trend", "box")}
     out["errors"] = err
     subject, body, doc = compose(out)
     out["subject"] = subject
-    os.makedirs(wd, exist_ok=True)
     json.dump(out, open(os.path.join(wd, "state.json"), "w"), ensure_ascii=False, indent=1)
     open(os.path.join(wd, "draft.txt"), "w").write(body)
     open(os.path.join(wd, "draft.html"), "w").write(doc)
@@ -384,7 +446,7 @@ def compose(o):
             if bx["drop_days"] is not None: bxl.append(f"- 새 저점·고점이 없으면 약 {bx['drop_days']:.0f}일 뒤 폭이 30% 아래로 내려와 박스 후보가 됩니다")
             bx_size = None
         bxl.append("- 규칙: 하단 2% 이내 + 반등 봉에서만 롱, 손절 하단 3% 아래, 1차 목표 박스 중간. 상단 숏은 하지 않음 (백테스트 평균 -0.29R)")
-    bx_title = "박스권 (20일 고점·저점 기준, 본 계획과 별도의 작은 거래)"
+    bx_title = "5. 박스권 (20일 고점·저점 기준, 본 계획과 별도의 작은 거래)"
     # ── 추세 ──
     ts_, tm_ = o.get("trend_short"), o.get("trend_mid"); trl = []
     if ts_:
@@ -394,7 +456,7 @@ def compose(o):
         trl.append(f"- 중기 (몇 주, 일봉): {tm_['dir']} · 종가 {'>' if d['close'] > tm_['sma50'] else '<'} 50일 평균 {usd(tm_['sma50'])}, 20일 평균 {usd(tm_['sma20'])} · 30일 등락 {pc(tm_['chg30'])}")
         trl.append(f"- 고점·저점 흐름 (20일 단위): 고점 {tm_['hh']} ({usd(tm_['hh20'])}), 저점 {tm_['ll']} ({usd(tm_['ll20'])}) · 90일 고점 대비 {pc(tm_['dd90'])}")
     if trl: trl.append("- 기준: 단기는 EMA12와 EMA48의 위아래와 가격 위치, 중기는 50일 평균과 20일 평균의 위아래. 둘 다 같은 방향일 때만 그 방향으로 보고, 아니면 중립입니다. 참고 정보이며 진입 판정에는 쓰지 않습니다.")
-    tr_title = "단기·중기 추세 (참고)"
+    tr_title = "4. 단기·중기 추세 (참고)"
     plan = [f"- 시작 자금 {START_CAPITAL:,.0f} USDT, 기간 90일, 목표 잔고 {TARGET_BAL:,.0f} USDT" + (f" ({TARGET_NOTE})" if TARGET_NOTE else ""),
             f"- 시도당 최대 손실 {START_CAPITAL*RISK_FRAC:,.0f} USDT, 포지션은 잔고의 {LEV_CAP}배 이하",
             "- 처음 손절가는 투매 저점의 1% 아래, 이후 매일 09시에 추적 손절가로 올림",
@@ -454,6 +516,7 @@ def compose(o):
         tin = ""
         if ts_: tin += f'<div style="font-size:14px;color:#24292f;line-height:1.7">단기 (며칠) {pill(ts_["dir"])} <span style="color:#57606a;font-size:12px">{esc(trl[0].split("· ",1)[1] if "· " in trl[0] else "")}</span></div>'
         if tm_: tin += f'<div style="font-size:14px;color:#24292f;line-height:1.7">중기 (몇 주) {pill(tm_["dir"])} <span style="color:#57606a;font-size:12px">{esc(trl[1].split("· ",1)[1] if "· " in trl[1] else "")}</span></div>'
+        if (o.get("charts") or {}).get("trend"): tin += '<img src="cid:chart_trend" alt="추세 차트" width="100%" style="display:block;width:100%;max-width:568px;height:auto;margin:10px 0 6px;border-radius:8px">'
         tin += ul(trl[2:], 12, "#57606a")
         H.append(card(tr_title, tin))
     if bx:
@@ -470,10 +533,13 @@ def compose(o):
                 bin_ += tiles([("진입가", usd(bx_size["entry"]), "마지막 4시간 종가", "#24292f"), ("손절가", usd(bx_size["stop"]), f"하단 3% 아래 (-{bx_size['dist']*100:.1f}%)", "#b3261e"),
                                ("1차 목표", usd(bx_size["tgt"]), f"박스 중간 · 손익비 {bx_size['rr']:.1f}", "#0f7b3f"),
                                ("수량", f"{bx_size['qty']:.3f} BTC", f"{bx_size['notional']:,.0f} USDT · 잔고의 {bx_size['lev']:.1f}배 · 손실 한도 {bx_size['risk']:,.0f}", "#24292f")])
+            if (o.get("charts") or {}).get("box"): bin_ += '<img src="cid:chart_box" alt="박스 차트" width="100%" style="display:block;width:100%;max-width:568px;height:auto;margin:10px 0 6px;border-radius:8px">'
             bin_ += ul([bxl[-1]], 12, "#57606a")
             H.append(card(bx_title, bin_, border=bbd, bg=bbg if bx_kind != "wait" else "#ffffff", tcolor=bfg, thick=bx_kind in ("go", "void")))
         else:
-            H.append(card(bx_title, f'<div style="font-size:14px;color:#24292f;line-height:1.55">박스 아님 · 20일 저점 {usd(bx["lo"])} ~ 고점 {usd(bx["hi"])}, 폭 {bx["w"]*100:.0f}%</div>' + ul(bxl[1:], 12, "#57606a")))
+            nb = f'<div style="font-size:14px;color:#24292f;line-height:1.55">박스 아님 · 20일 저점 {usd(bx["lo"])} ~ 고점 {usd(bx["hi"])}, 폭 {bx["w"]*100:.0f}%</div>'
+            if (o.get("charts") or {}).get("box"): nb += '<img src="cid:chart_box" alt="박스 차트" width="100%" style="display:block;width:100%;max-width:568px;height:auto;margin:10px 0 6px;border-radius:8px">'
+            H.append(card(bx_title, nb + ul(bxl[1:], 12, "#57606a")))
     if lm:
         rows = [("위", b, "#0f7b3f", "숏 청산") for b in reversed(lm["above"])] + [("아래", b, "#b3261e", "롱 청산") for b in lm["below"]]
         mx = max([b["usd"] for _, b, _, _ in rows] + [1])
@@ -505,12 +571,26 @@ def send(wd, note_path=None, prefix=""):
     note = open(note_path).read().strip() if note_path and os.path.exists(note_path) else ""
     body = body.replace("{{해석}}\n\n", ("■ 해석\n" + note + "\n\n") if note else "")
     doc = doc.replace("<!--NOTE-->", card("해석", ul([x for x in note.splitlines() if x.strip()])) if note else "")
+    import base64
+    atts = []
+    for k in ("trend", "box"):
+        fp = os.path.join(wd, f"chart_{k}.png")
+        if os.path.exists(fp) and f"cid:chart_{k}" in doc:
+            atts.append({"filename": f"chart_{k}.png", "content": base64.b64encode(open(fp, "rb").read()).decode(), "content_id": f"chart_{k}", "content_type": "image/png"})
     payload = os.path.join(wd, "mail.json")
-    json.dump({"from": MAIL_FROM, "to": [MAIL_TO], "subject": prefix + st["subject"], "text": body, "html": doc}, open(payload, "w"), ensure_ascii=False)
+    msg = {"from": MAIL_FROM, "to": [MAIL_TO], "subject": prefix + st["subject"], "text": body, "html": doc}
+    if atts: msg["attachments"] = atts
+    json.dump(msg, open(payload, "w"), ensure_ascii=False)
     open(os.path.join(wd, "final.html"), "w").write(doc)
     r = subprocess.run(["curl", "-sS", "-m", "30", "-w", "\nHTTP %{http_code}", "-X", "POST", "https://api.resend.com/emails",
                         "-H", "Content-Type: application/json", "--data-binary", "@" + payload], capture_output=True, text=True)
     print(r.stdout, r.stderr)
+    if "HTTP 200" not in r.stdout and atts and "HTTP 4" in r.stdout:      # 첨부가 거부되면 그림 없이 한 번 더
+        msg.pop("attachments"); msg["html"] = re.sub(r'<img src="cid:[^"]+"[^>]*>', "", doc)
+        json.dump(msg, open(payload, "w"), ensure_ascii=False)
+        r = subprocess.run(["curl", "-sS", "-m", "30", "-w", "\nHTTP %{http_code}", "-X", "POST", "https://api.resend.com/emails",
+                            "-H", "Content-Type: application/json", "--data-binary", "@" + payload], capture_output=True, text=True)
+        print("재시도(첨부 없이):", r.stdout, r.stderr)
     if "HTTP 200" in r.stdout: open(flag, "w").write(r.stdout)
     else: sys.exit(1)
 

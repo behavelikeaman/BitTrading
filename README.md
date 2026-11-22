@@ -24,6 +24,8 @@ python3 -I btc_signal.py send <작업폴더> <작업폴더>/note.txt
 
 `<작업폴더>/config.json`이 필요합니다. 형식은 `config.example.json`을 보세요. 받는 주소와 잔고 같은 개인 값은 이 저장소에 넣지 않습니다.
 
+차트: `matplotlib`이 설치돼 있으면 추세·박스 차트 PNG를 만들어 메일에 인라인 첨부합니다 (`pip install matplotlib`). 없으면 글로만 보냅니다.
+
 메일은 Resend API로 보냅니다. API 키는 실행 환경이 요청에 붙여 주는 방식을 가정하며, 스크립트에는 키가 없습니다.
 
 ## 데이터 출처
