@@ -270,7 +270,10 @@ def compose(o):
             (d["c_notlowday"], f"신저가 당일 아님: 저점 후 {d['k']}일 경과 (기준 1일 이상)")]
     real = d["signal"] and not (lv and lv["hit_stop"])
     if real: size_title, z = f"진입 시 수량 (현재가 기준, 잔고 {BALANCE:,.0f} USDT)", sizing(price, d["stop"])
-    elif lv: size_title, z = f"조건이 채워지면 (예상: 저점 {usd(lv['proj']['low'])} 유지, 지금 가격에 진입한다고 가정)", sizing(price, lv["proj"]["low"]*0.99)
+    elif lv:
+        plow = lv["proj"]["low"]; cap_px = plow * (1 + MAX_DIST)
+        if price <= cap_px: size_title, z = f"조건이 채워지면 (예상: 저점 {usd(plow)} 유지, 지금 가격에 진입한다고 가정)", sizing(price, plow*0.99)
+        else: size_title, z = f"조건이 채워지면 (예상: 저점 {usd(plow)} 유지, 규칙상 최고 진입가 {usd(cap_px)} 기준. 현재가 {usd(price)}는 저점 대비 6%를 넘어 진입 불가)", sizing(cap_px, plow*0.99)
     else: size_title, z = None, None
     trail = [f"- 오늘의 추적 손절가 {usd(d['trail_stop'])} (최근 {TRAIL_DAYS}일 최저가 {usd(d['trail_low'])}의 1% 아래)",
              "- 지금 걸어 둔 손절가보다 높으면 이 값으로 올리고, 낮으면 그대로 둡니다. 오늘 새로 진입했다면 내일 09시부터 적용합니다."]
@@ -341,7 +344,7 @@ def compose(o):
     H = [hero]
     if size_title:
         if z and z["qty"] > 0:
-            inner = tiles([("진입가", usd(z["entry"]), "현재가 기준", "#24292f"),
+            inner = tiles([("진입가", usd(z["entry"]), "현재가 기준" if abs(z["entry"] - price) < 1 else "규칙상 최고 진입가", "#24292f"),
                            ("손절가", usd(z["stop"]), f"진입가 대비 -{z['dist']*100:.1f}%", "#b3261e"),
                            ("권고 레버리지", f"{z['lev_set']}배", "격리 마진 설정값", "#3b4bc4"),
                            ("주문 금액", f"{z['notional']:,.0f} USDT", f"= {z['qty']:.3f} BTC · 잔고의 {z['lev']:.1f}배", "#24292f"),
