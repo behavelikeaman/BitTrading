@@ -23,6 +23,9 @@ TRAIL_DAYS = 7           # 추적 손절: 최근 7일 최저가
 MAX_DIST = 0.06          # 저점 대비 진입 허용 거리
 DD_REGIME = -0.15        # 하락 국면 기준
 LIQ_TIERS = [(5, .15), (10, .30), (25, .30), (50, .15), (100, .10)]   # 추정 청산 구간: 레버리지 가정과 비중
+BOX_DAYS, BOX_AGE, BOX_WMIN, BOX_WMAX, BOX_ZONE, BOX_STOP = 20, 3, 0.06, 0.30, 0.02, 0.03   # 박스권 규칙 (백테스트 설정)
+BOX_RISK_FRAC = 0.03     # 박스 하단 롱의 손실 한도 = 잔고의 3% (config.json의 box_risk_frac로 덮어씀)
+BOX_LEV_CAP = 3
 MAIL_FROM = "BTC 점검 <onboarding@resend.dev>"
 
 def load_config(wd):
@@ -30,6 +33,7 @@ def load_config(wd):
     c = json.load(open(os.path.join(wd, "config.json")))
     START_CAPITAL = float(c["start_capital"]); BALANCE = float(c.get("balance", START_CAPITAL))
     TARGET_BAL = float(c["target_balance"]); TARGET_NOTE = c.get("target_note", ""); MAIL_TO = c["mail_to"]
+    global BOX_RISK_FRAC; BOX_RISK_FRAC = float(c.get("box_risk_frac", BOX_RISK_FRAC))
 
 def get(url, tries=3):
     for i in range(tries):
@@ -105,6 +109,11 @@ def collect(wd):
             if rule_state(O, H, L, C, j)["signal"]: streak += 1
             else: break
         trail_low = min(L[i-TRAIL_DAYS+1:i+1])
+        sma50 = sum(C[i-49:i+1])/50; sma20 = sum(C[i-19:i+1])/20
+        hh20, ll20 = max(H[i-19:i+1]), min(L[i-19:i+1]); hh20p, ll20p = max(H[i-39:i-19]), min(L[i-39:i-19])
+        mt_dir = "상승" if C[i] > sma50 and sma20 > sma50 else "하락" if C[i] < sma50 and sma20 < sma50 else "중립"
+        out["trend_mid"] = dict(dir=mt_dir, sma50=sma50, sma20=sma20, chg30=C[i]/C[i-30]-1, dd90=C[i]/max(H[i-89:i+1])-1,
+                                hh=("높아짐" if hh20 > hh20p else "낮아짐"), ll=("높아짐" if ll20 > ll20p else "낮아짐"), hh20=hh20, ll20=ll20)
         out["daily"] = dict(close_time=dt.datetime.fromtimestamp(ts[i]+86400, KST).strftime("%m/%d %H:%M"),
                             close=C[i], bar_low=L[i], bar_high=H[i], low_bar=bar(ts[s["lo"]]), streak=streak,
                             high90=max(H[i-89:i+1]), trail_low=trail_low, trail_stop=trail_low*0.99,
@@ -118,12 +127,47 @@ def collect(wd):
                                proj={k: v for k, v in p.items() if k != "lo"}, proj_low_bar=bar((ts+[lv[0]])[p["lo"]]))
     except Exception as e: err.append(f"일봉: {e}")
 
-    # 2) 4시간 봉 (OKX BTC-USDT 현물)
+    # 2) 4시간 봉 (OKX BTC-USDT 현물, 최근 300개 = 50일) → 최근 봉 표시, 박스권, 단기 추세
     try:
-        rows = json.loads(get("https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar=4H&limit=8"))["data"]
-        closed = [r for r in rows if r[8] == "1"][:6]
+        rows = json.loads(get("https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar=4H&limit=300"))["data"]
+        closed = [r for r in rows if r[8] == "1"]                       # 최신이 먼저
         out["h4"] = [dict(close_time=dt.datetime.fromtimestamp(int(r[0])/1000 + 14400, KST).strftime("%m/%d %H:%M"),
-                          open=float(r[1]), high=float(r[2]), low=float(r[3]), close=float(r[4])) for r in closed]
+                          open=float(r[1]), high=float(r[2]), low=float(r[3]), close=float(r[4])) for r in closed[:6]]
+        b = closed[::-1]                                                 # 오래된 것부터
+        hO = [float(r[1]) for r in b]; hH = [float(r[2]) for r in b]; hL = [float(r[3]) for r in b]; hC = [float(r[4]) for r in b]
+        n = BOX_DAYS*6; i = len(b)-1
+        if i >= n:
+            lo_i = min(range(i-n+1, i+1), key=lambda j: hL[j]); hi_i = max(range(i-n+1, i+1), key=lambda j: hH[j])
+            lo, hi = hL[lo_i], hH[hi_i]; w = hi/lo - 1; lo_age = (i-lo_i)/6; hi_age = (i-hi_i)/6
+            valid = lo_age >= BOX_AGE and hi_age >= BOX_AGE and BOX_WMIN <= w <= BOX_WMAX
+            why = []
+            if lo_age < BOX_AGE: why.append(f"저점이 {lo_age:.1f}일 전 (3일 이상 필요)")
+            if hi_age < BOX_AGE: why.append(f"고점이 {hi_age:.1f}일 전 (3일 이상 필요)")
+            if w > BOX_WMAX: why.append(f"폭 {w*100:.0f}%로 30% 초과 (아직 추세 중)")
+            if w < BOX_WMIN: why.append(f"폭 {w*100:.1f}%로 6% 미만")
+            near_low = hC[i] <= lo*(1+BOX_ZONE); up_close = hC[i] > hC[i-1]; above_low = hC[i] > lo
+            long_ok = valid and near_low and up_close and above_low
+            # 11월 초 고점처럼 폭을 키우는 봉이 창에서 빠지는 시점
+            drop_days = None
+            if w > BOX_WMAX:
+                for k in range(1, n):
+                    if max(hH[i-n+1+k:i+1]) / min(hL[i-n+1+k:i+1]) - 1 <= BOX_WMAX: drop_days = k/6; break
+            out["box"] = dict(lo=lo, hi=hi, mid=(lo+hi)/2, w=w, lo_age=lo_age, hi_age=hi_age, valid=valid, why=why,
+                              lo_time=dt.datetime.fromtimestamp(int(b[lo_i][0])/1000 + 14400, KST).strftime("%m/%d %H:%M"),
+                              hi_time=dt.datetime.fromtimestamp(int(b[hi_i][0])/1000 + 14400, KST).strftime("%m/%d %H:%M"),
+                              pos=(hC[i]-lo)/(hi-lo) if hi > lo else 0, last_close=hC[i], near_low=near_low, up_close=up_close,
+                              above_low=above_low, long_ok=long_ok, broke_low=hC[i] < lo, broke_high=hC[i] > hi, drop_days=drop_days,
+                              last_close_time=out["h4"][0]["close_time"])
+        # 단기 추세 (4시간 봉): EMA12/EMA48 + 5일 등락
+        def ema(x, k):
+            e = [x[0]]; a = 2/(k+1)
+            for v in x[1:]: e.append(e[-1] + a*(v-e[-1]))
+            return e
+        e12, e48 = ema(hC, 12), ema(hC, 48)
+        chg5 = hC[i]/hC[i-30] - 1 if i >= 30 else 0
+        st_dir = "상승" if e12[i] > e48[i] and hC[i] > e48[i] else "하락" if e12[i] < e48[i] and hC[i] < e48[i] else "중립"
+        out["trend_short"] = dict(dir=st_dir, e12=e12[i], e48=e48[i], chg5=chg5,
+                                  cross_days=next((k/6 for k in range(1, min(i, 200)) if (e12[i-k] > e48[i-k]) != (e12[i] > e48[i])), None))
     except Exception as e: err.append(f"4시간봉: {e}")
 
     # 3) 보조: 펀딩비 (OKX)
@@ -314,6 +358,43 @@ def compose(o):
         lml += [f"- 현재가 5% 이내: 아래(롱) {m(lm['below5'])} / 위(숏) {m(lm['above5'])}. 10% 이내: 아래 {m(lm['below10'])} / 위 {m(lm['above10'])}",
                 f"- OKX 무기한 최근 약 {lm['hours']//24}일의 미결제약정 변화에 레버리지 5~100배를 가정한 추정치입니다. 기준가 {usd(lm['price'])}"]
     lm_title = "추정 청산 구간 (OKX 기준 추정, 진입 판정에는 쓰지 않음)"
+    # ── 박스권 ──
+    bx = o.get("box"); bxl = []; bx_kind = "wait"; bx_head = ""
+    if bx:
+        if bx["valid"]:
+            bxl = [f"- 박스 섰음: 하단 {usd(bx['lo'])} ({bx['lo_time']}) ~ 상단 {usd(bx['hi'])} ({bx['hi_time']}), 폭 {bx['w']*100:.1f}%, 중간 {usd(bx['mid'])}",
+                   f"- 마지막 4시간 종가 {usd(bx['last_close'])}는 박스의 {bx['pos']*100:.0f}% 위치 (0%=하단, 100%=상단)"]
+            if bx["broke_low"]: bx_kind, bx_head = "void", "4시간 종가가 하단 아래로 마감했습니다. 이탈 가능성이 있어 하단 롱은 하지 않습니다. 보유 중이면 정리 대상입니다."
+            elif bx["long_ok"]: bx_kind, bx_head = "go", f"하단 롱 조건 충족: 종가가 하단 2% 이내이고 직전 봉보다 높게 마감했습니다."
+            elif bx["near_low"]: bx_kind, bx_head = "far", f"하단 2% 이내이지만 아직 반등 봉(직전 봉보다 높은 마감)이 나오지 않았습니다. 다음 4시간 봉을 봅니다."
+            elif bx["pos"] > 0.8: bx_kind, bx_head = "wait", "상단 근처입니다. 숏은 하지 않고, 보유 중인 하단 롱이 있으면 남은 물량을 정리하는 자리입니다."
+            else: bx_kind, bx_head = "wait", "박스 중간입니다. 할 일이 없습니다."
+            bxl.append("- " + bx_head)
+            if bx["long_ok"] or bx["near_low"]:
+                entry = bx["last_close"]; stop = bx["lo"]*(1-BOX_STOP); dist = (entry-stop)/entry
+                risk = BALANCE*BOX_RISK_FRAC; notional = min(risk/dist, BOX_LEV_CAP*BALANCE) if dist > 0 else 0; qty = int(notional/entry*1000)/1000
+                bx_size = dict(entry=entry, stop=stop, tgt=bx["mid"], dist=dist, risk=risk, notional=qty*entry, qty=qty, lev=qty*entry/BALANCE,
+                               rr=(bx["mid"]-entry)/(entry-stop) if entry > stop else 0)
+                bxl += [f"- 하단 롱 주문 예시 (손실 한도 잔고의 {BOX_RISK_FRAC*100:.0f}% = {risk:,.0f} USDT): 진입 {usd(entry)}, 손절 {usd(stop)} (-{dist*100:.1f}%), 1차 목표 {usd(bx['mid'])} (손익비 {bx_size['rr']:.1f})",
+                        f"  수량 {qty:.3f} BTC = {qty*entry:,.0f} USDT (잔고의 {qty*entry/BALANCE:.1f}배, 레버리지 1~{BOX_LEV_CAP}배면 충분). 10일 안에 목표 미도달 시 정리"]
+            else: bx_size = None
+        else:
+            bxl = [f"- 박스 아님: 최근 20일 저점 {usd(bx['lo'])} ({bx['lo_time']}), 고점 {usd(bx['hi'])} ({bx['hi_time']}), 폭 {bx['w']*100:.0f}%",
+                   "- 이유: " + ", ".join(bx["why"])]
+            if bx["drop_days"] is not None: bxl.append(f"- 새 저점·고점이 없으면 약 {bx['drop_days']:.0f}일 뒤 폭이 30% 아래로 내려와 박스 후보가 됩니다")
+            bx_size = None
+        bxl.append("- 규칙: 하단 2% 이내 + 반등 봉에서만 롱, 손절 하단 3% 아래, 1차 목표 박스 중간. 상단 숏은 하지 않음 (백테스트 평균 -0.29R)")
+    bx_title = "박스권 (20일 고점·저점 기준, 본 계획과 별도의 작은 거래)"
+    # ── 추세 ──
+    ts_, tm_ = o.get("trend_short"), o.get("trend_mid"); trl = []
+    if ts_:
+        cd = f", 교차 후 {ts_['cross_days']:.1f}일" if ts_["cross_days"] is not None else ""
+        trl.append(f"- 단기 (며칠, 4시간 봉): {ts_['dir']} · EMA12 {usd(ts_['e12'])} {'>' if ts_['e12'] > ts_['e48'] else '<'} EMA48 {usd(ts_['e48'])}{cd} · 5일 등락 {pc(ts_['chg5'])}")
+    if tm_:
+        trl.append(f"- 중기 (몇 주, 일봉): {tm_['dir']} · 종가 {'>' if d['close'] > tm_['sma50'] else '<'} 50일 평균 {usd(tm_['sma50'])}, 20일 평균 {usd(tm_['sma20'])} · 30일 등락 {pc(tm_['chg30'])}")
+        trl.append(f"- 고점·저점 흐름 (20일 단위): 고점 {tm_['hh']} ({usd(tm_['hh20'])}), 저점 {tm_['ll']} ({usd(tm_['ll20'])}) · 90일 고점 대비 {pc(tm_['dd90'])}")
+    if trl: trl.append("- 기준: 단기는 EMA12와 EMA48의 위아래와 가격 위치, 중기는 50일 평균과 20일 평균의 위아래. 둘 다 같은 방향일 때만 그 방향으로 보고, 아니면 중립입니다. 참고 정보이며 진입 판정에는 쓰지 않습니다.")
+    tr_title = "단기·중기 추세 (참고)"
     plan = [f"- 시작 자금 {START_CAPITAL:,.0f} USDT, 기간 90일, 목표 잔고 {TARGET_BAL:,.0f} USDT" + (f" ({TARGET_NOTE})" if TARGET_NOTE else ""),
             f"- 시도당 최대 손실 {START_CAPITAL*RISK_FRAC:,.0f} USDT, 포지션은 잔고의 {LEV_CAP}배 이하",
             "- 처음 손절가는 투매 저점의 1% 아래, 이후 매일 09시에 추적 손절가로 올림",
@@ -330,6 +411,8 @@ def compose(o):
     if size_title: B += ["■ " + size_title] + size_lines(z) + [""]
     B += ["■ 보유 중이라면: 추적 손절"] + trail + [""]
     if livel: B += ["■ 지금 (09시 이후 진행 중인 일봉)"] + livel + [""]
+    if trl: B += ["■ " + tr_title] + trl + [""]
+    if bxl: B += ["■ " + bx_title] + bxl + [""]
     if lml: B += ["■ " + lm_title] + lml + [""]
     if h4: B += ["■ 최근 4시간 봉 (OKX, 마감 시각 KST)"] + h4 + [""]
     B += ["■ 보조 지표 (진입 판정에는 쓰지 않음)"] + [f"{mark(ok)} {t}" for ok, t in aux] + ["", "{{해석}}", "", "■ 계획 요약"] + plan + ["", "■ 참고"] + ref + ["", foot]
@@ -364,6 +447,33 @@ def compose(o):
     H.append(card("3. 보유 중이라면: 추적 손절", tinner, border="#6e7ff3", bg="#f7f8ff", tcolor="#3b4bc4", thick=True))
     H.append(card(esc(crit_title), checks(crit)))
     if livel: H.append(card("지금 (09시 이후 진행 중인 일봉)", ul(livel)))
+    if trl:
+        def pill(t):
+            c = {"상승": ("#0f7b3f", "#e6f4ea"), "하락": ("#b3261e", "#fdecea"), "중립": ("#57606a", "#f1f3f5")}[t]
+            return f'<span style="display:inline-block;padding:2px 10px;border-radius:999px;background:{c[1]};color:{c[0]};font-weight:700;font-size:13px">{t}</span>'
+        tin = ""
+        if ts_: tin += f'<div style="font-size:14px;color:#24292f;line-height:1.7">단기 (며칠) {pill(ts_["dir"])} <span style="color:#57606a;font-size:12px">{esc(trl[0].split("· ",1)[1] if "· " in trl[0] else "")}</span></div>'
+        if tm_: tin += f'<div style="font-size:14px;color:#24292f;line-height:1.7">중기 (몇 주) {pill(tm_["dir"])} <span style="color:#57606a;font-size:12px">{esc(trl[1].split("· ",1)[1] if "· " in trl[1] else "")}</span></div>'
+        tin += ul(trl[2:], 12, "#57606a")
+        H.append(card(tr_title, tin))
+    if bx:
+        bfg, bbg, bbd = KIND[bx_kind]
+        if bx["valid"]:
+            p_ = max(0, min(1, bx["pos"]))
+            bar = (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:6px 0 4px"><tr>'
+                   f'<td style="font-size:12px;color:#57606a;white-space:nowrap;padding-right:6px">{usd(bx["lo"])}</td>'
+                   f'<td><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:#e6f4ea;height:12px;border-radius:6px" width="{int(p_*100)}%"></td><td style="background:#eceff3;height:12px;border-radius:6px"></td></tr></table></td>'
+                   f'<td style="font-size:12px;color:#57606a;white-space:nowrap;padding-left:6px">{usd(bx["hi"])}</td></tr></table>'
+                   f'<div style="font-size:12px;color:#57606a">현재 위치 {bx["pos"]*100:.0f}% · 중간 {usd(bx["mid"])} · 폭 {bx["w"]*100:.1f}%</div>')
+            bin_ = (f'<div style="font-size:15px;font-weight:700;color:{bfg};line-height:1.5">{esc(bx_head)}</div>' + bar)
+            if bx_size:
+                bin_ += tiles([("진입가", usd(bx_size["entry"]), "마지막 4시간 종가", "#24292f"), ("손절가", usd(bx_size["stop"]), f"하단 3% 아래 (-{bx_size['dist']*100:.1f}%)", "#b3261e"),
+                               ("1차 목표", usd(bx_size["tgt"]), f"박스 중간 · 손익비 {bx_size['rr']:.1f}", "#0f7b3f"),
+                               ("수량", f"{bx_size['qty']:.3f} BTC", f"{bx_size['notional']:,.0f} USDT · 잔고의 {bx_size['lev']:.1f}배 · 손실 한도 {bx_size['risk']:,.0f}", "#24292f")])
+            bin_ += ul([bxl[-1]], 12, "#57606a")
+            H.append(card(bx_title, bin_, border=bbd, bg=bbg if bx_kind != "wait" else "#ffffff", tcolor=bfg, thick=bx_kind in ("go", "void")))
+        else:
+            H.append(card(bx_title, f'<div style="font-size:14px;color:#24292f;line-height:1.55">박스 아님 · 20일 저점 {usd(bx["lo"])} ~ 고점 {usd(bx["hi"])}, 폭 {bx["w"]*100:.0f}%</div>' + ul(bxl[1:], 12, "#57606a")))
     if lm:
         rows = [("위", b, "#0f7b3f", "숏 청산") for b in reversed(lm["above"])] + [("아래", b, "#b3261e", "롱 청산") for b in lm["below"]]
         mx = max([b["usd"] for _, b, _, _ in rows] + [1])

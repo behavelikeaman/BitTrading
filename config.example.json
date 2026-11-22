@@ -3,5 +3,6 @@
   "start_capital": 1000,
   "balance": 1000,
   "target_balance": 4000,
-  "target_note": ""
+  "target_note": "",
+  "box_risk_frac": 0.03
 }
