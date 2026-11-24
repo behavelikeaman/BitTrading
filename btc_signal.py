@@ -12,6 +12,7 @@
   - 처음 손절가 = 투매 저점의 1% 아래
   - 추적 손절 = 매일 09시, 최근 7일 최저가의 1% 아래가 더 높으면 그쪽으로 올림
   - 손절되면 다음 신호에 재진입
+급변동: 최근 24시간 1시간 봉 급등락을 참고로 표시합니다. <작업폴더>/news.txt가 있으면 원인 뉴스로 붙입니다("- 요약 | URL").
 별첨: 저장소의 views.json에 있는 외부 의견을 메일 끝에 붙입니다(만료일이 지나면 자동으로 빠짐, 판정에는 쓰지 않음).
 차트: matplotlib이 있으면 추세·박스 차트 PNG를 만들어 메일에 인라인 첨부합니다. 없으면 글로만 보냅니다.
 """
@@ -29,6 +30,7 @@ BOX_DAYS, BOX_AGE, BOX_WMIN, BOX_WMAX, BOX_ZONE, BOX_STOP = 20, 3, 0.06, 0.30, 0
 BOX_RISK_FRAC = 0.03     # 박스 하단 롱의 손실 한도 = 잔고의 3% (config.json의 box_risk_frac로 덮어씀)
 BOX_LEV_CAP = 3
 MAIL_FROM = "BTC 점검 <onboarding@resend.dev>"
+SHOCK_RET, SHOCK_RNG, SHOCK_MULT = 0.025, 0.035, 6   # 급변동: 1시간 봉 등락 2.5% 또는 봉 길이 3.5% 이상, 둘 다 평소(7일 중앙값)의 6배 이상
 
 def load_config(wd):
     global START_CAPITAL, BALANCE, TARGET_BAL, TARGET_NOTE, MAIL_TO
@@ -289,7 +291,11 @@ def collect(wd):
     try: out["liqmap"] = liq_map()
     except Exception as e: err.append(f"청산 구간: {e}")
 
-    # 8) 별첨: 외부 전문가 의견 (저장소의 views.json, 판정에는 쓰지 않음)
+    # 8) 참고: 최근 24시간 급변동 (1시간 봉)
+    try: out["shock"] = shocks(now)
+    except Exception as e: err.append(f"급변동 감지: {e}")
+
+    # 9) 별첨: 외부 전문가 의견 (저장소의 views.json, 판정에는 쓰지 않음)
     try: out["views"] = load_views(now)
     except Exception as e: err.append(f"외부 의견 파일: {e}")
 
@@ -303,6 +309,36 @@ def collect(wd):
     open(os.path.join(wd, "draft.txt"), "w").write(body)
     open(os.path.join(wd, "draft.html"), "w").write(doc)
     print("SUBJECT:", subject); print(body); print("\n--- state.json ---"); print(json.dumps(out, ensure_ascii=False))
+
+def shocks(now):
+    """최근 24시간 1시간 봉에서 급등락을 찾는다 (OKX BTC-USDT 현물, 확정봉만). 참고용, 판정에는 쓰지 않는다."""
+    d = json.loads(get("https://www.okx.com/api/v5/market/candles?instId=BTC-USDT&bar=1H&limit=220"))["data"][::-1]
+    last_px = float(d[-1][4])                                   # 진행 중인 봉 포함 가장 최근 가격
+    d = [r for r in d if r[8] == "1"]
+    T = [int(r[0]) for r in d]; O, H, L, C = ([float(r[k]) for r in d] for k in (1, 2, 3, 4)); N = len(d)
+    ret = [abs(C[i]/O[i]-1) for i in range(N)]; rng = [(H[i]-L[i])/O[i] for i in range(N)]
+    med = lambda x: sorted(x)[len(x)//2]
+    since = (now - dt.timedelta(hours=24)).timestamp() * 1000
+    flag = []
+    for i in range(168, N):
+        if T[i] < since: continue
+        mr, mg = med(ret[i-168:i]), med(rng[i-168:i])
+        if (ret[i] >= SHOCK_RET and ret[i] >= SHOCK_MULT*mr) or (rng[i] >= SHOCK_RNG and rng[i] >= SHOCK_MULT*mg): flag.append(i)
+    ev = []
+    for i in flag:                                              # 3시간 안에 이어진 봉은 한 사건으로 묶음
+        if ev and i - ev[-1]["last"] <= 3: ev[-1]["last"] = i; continue
+        ev.append(dict(first=i, last=i))
+    out = []
+    for e in ev:
+        a, b = e["first"], min(e["last"] + 3, N - 1)
+        pre = O[a]; up = C[e["first"]] >= O[a] if e["first"] == e["last"] else max(H[a:b+1])/pre - 1 >= 1 - min(L[a:b+1])/pre
+        ext = max(H[a:b+1]) if up else min(L[a:b+1])
+        retr = (ext - last_px) / (ext - pre) if ext != pre else 0
+        t0 = dt.datetime.fromtimestamp(T[a]/1000, KST)
+        out.append(dict(start_kst=t0.strftime("%m/%d %H시"), start_utc=dt.datetime.fromtimestamp(T[a]/1000, UTC).strftime("%Y-%m-%d %H:%M UTC"),
+                        up=up, pre=pre, ext=ext, ext_pct=ext/pre-1, bar_pct=C[a]/O[a]-1, bars=e["last"]-a+1, now=last_px, now_pct=last_px/pre-1, retrace=retr,
+                        typical=med(ret[a-168:a])))
+    return out
 
 def load_views(now):
     """저장소의 views.json에서 아직 유효한 외부 의견만 고른다."""
@@ -487,6 +523,17 @@ def compose(o):
         trl.append(f"- 고점·저점 흐름 (20일 단위): 고점 {tm_['hh']} ({usd(tm_['hh20'])}), 저점 {tm_['ll']} ({usd(tm_['ll20'])}) · 90일 고점 대비 {pc(tm_['dd90'])}")
     if trl: trl.append("- 기준: 단기는 EMA12와 EMA48의 위아래와 가격 위치, 중기는 50일 평균과 20일 평균의 위아래. 둘 다 같은 방향일 때만 그 방향으로 보고, 아니면 중립입니다. 참고 정보이며 진입 판정에는 쓰지 않습니다.")
     tr_title = "4. 단기·중기 추세 (참고)"
+    shl = []
+    for e in o.get("shock") or []:
+        dirw = "급등" if e["up"] else "급락"
+        if e["retrace"] >= 1: rw = f"{dirw}분을 모두 되돌림 (직전 가격보다 {'아래' if e['up'] else '위'})"
+        elif e["retrace"] >= 0.5: rw = f"{dirw}분의 {e['retrace']*100:.0f}% 되돌림"
+        elif e["retrace"] >= 0: rw = f"{dirw}분의 대부분 유지 ({e['retrace']*100:.0f}% 되돌림)"
+        else: rw = f"{dirw} 방향으로 더 진행"
+        shl.append(f"- {e['start_kst']}부터 {e['bars']}시간 {dirw}: {usd(e['pre'])} → {'고가' if e['up'] else '저가'} {usd(e['ext'])} ({pc(e['ext_pct'])}). 평소 1시간 등락은 {e['typical']*100:.1f}% 안팎")
+        shl.append(f"- 지금 {usd(e['now'])} (직전 대비 {pc(e['now_pct'])}): {rw}")
+    sh_title = "급변동 감지 (최근 24시간, 참고)"
+    sh_note = "1시간 봉 기준 참고 정보입니다. 진입 판정은 09시 일봉 종가로만 하므로, 되돌려진 급등락은 판정에 영향이 없습니다."
     plan = [f"- 시작 자금 {START_CAPITAL:,.0f} USDT, 기간 90일, 목표 잔고 {TARGET_BAL:,.0f} USDT" + (f" ({TARGET_NOTE})" if TARGET_NOTE else ""),
             f"- 시도당 최대 손실 {START_CAPITAL*RISK_FRAC:,.0f} USDT, 포지션은 잔고의 {LEV_CAP}배 이하",
             "- 처음 손절가는 투매 저점의 1% 아래, 이후 매일 09시에 추적 손절가로 올림",
@@ -503,6 +550,7 @@ def compose(o):
     if size_title: B += ["■ " + size_title] + size_lines(z) + [""]
     B += ["■ 보유 중이라면: 추적 손절"] + trail + [""]
     if livel: B += ["■ 지금 (09시 이후 진행 중인 일봉)"] + livel + [""]
+    if shl: B += ["■ " + sh_title] + shl + ["{{뉴스}}", "- " + sh_note, ""]
     if trl: B += ["■ " + tr_title] + trl + [""]
     if bxl: B += ["■ " + bx_title] + bxl + [""]
     if lml: B += ["■ " + lm_title] + lml + [""]
@@ -549,6 +597,9 @@ def compose(o):
     H.append(card("3. 보유 중이라면: 추적 손절", tinner, border="#6e7ff3", bg="#f7f8ff", tcolor="#3b4bc4", thick=True))
     H.append(card(esc(crit_title), checks(crit)))
     if livel: H.append(card("지금 (09시 이후 진행 중인 일봉)", ul(livel)))
+    if shl:
+        sfg, sbg, sbd = KIND["far"]
+        H.append(card(sh_title, ul(shl) + "<!--NEWS-->" + ul([sh_note], 12, "#57606a"), border=sbd, bg="#fffaf0", tcolor=sfg))
     if trl:
         def pill(t):
             c = {"상승": ("#0f7b3f", "#e6f4ea"), "하락": ("#b3261e", "#fdecea"), "중립": ("#57606a", "#f1f3f5")}[t]
@@ -629,6 +680,18 @@ def send(wd, note_path=None, prefix=""):
     note = open(note_path).read().strip() if note_path and os.path.exists(note_path) else ""
     body = body.replace("{{해석}}\n\n", ("■ 해석\n" + note + "\n\n") if note else "")
     doc = doc.replace("<!--NOTE-->", card("해석", ul([x for x in note.splitlines() if x.strip()])) if note else "")
+    # 급변동 원인 뉴스: <작업폴더>/news.txt, 한 줄에 "- 요약 | 출처 URL" (최대 3줄). 없으면 자리만 지운다
+    nf = os.path.join(wd, "news.txt"); news = []
+    if os.path.exists(nf):
+        for x in open(nf).read().splitlines()[:3]:
+            x = x.strip().lstrip("- ").strip()
+            if not x: continue
+            t, _, u = x.partition("|"); t, u = t.strip(), u.strip()
+            news.append((t, u if u.startswith("https://") else ""))
+    body = body.replace("{{뉴스}}\n", "".join(f"- 원인 뉴스: {t}" + (f" ({u})" if u else "") + "\n" for t, u in news))
+    nh = "".join(f'<div style="font-size:14px;color:#24292f;line-height:1.55;margin:6px 0 4px">원인 뉴스: {esc(t)}'
+                 + (f' <a href="{esc(u)}" style="color:#3b4bc4;font-size:12px">출처</a>' if u else "") + "</div>" for t, u in news)
+    doc = doc.replace("<!--NEWS-->", nh)
     import base64
     atts = []
     for k in ("trend", "box"):
