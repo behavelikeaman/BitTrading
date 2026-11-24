@@ -12,6 +12,7 @@
   - 처음 손절가 = 투매 저점의 1% 아래
   - 추적 손절 = 매일 09시, 최근 7일 최저가의 1% 아래가 더 높으면 그쪽으로 올림
   - 손절되면 다음 신호에 재진입
+악재·호재: brief_hours(기본 09시) 실행에서 <작업폴더>/brief.txt([악재]/[호재]/[일정]/[요약], "- 제목 | 설명 | URL")를 붙입니다.
 급변동: 최근 24시간 1시간 봉 급등락을 참고로 표시합니다. <작업폴더>/news.txt가 있으면 원인 뉴스로 붙입니다("- 요약 | URL").
 예정 이벤트: 저장소의 events.json(공식 발표 일정)과 계산한 옵션 만기를 참고로 표시합니다.
 별첨: 저장소의 views.json에 있는 외부 의견을 메일 끝에 붙입니다(만료일이 지나면 자동으로 빠짐, 판정에는 쓰지 않음).
@@ -31,6 +32,7 @@ BOX_DAYS, BOX_AGE, BOX_WMIN, BOX_WMAX, BOX_ZONE, BOX_STOP = 20, 3, 0.06, 0.30, 0
 BOX_RISK_FRAC = 0.03     # 박스 하단 롱의 손실 한도 = 잔고의 3% (config.json의 box_risk_frac로 덮어씀)
 BOX_LEV_CAP = 3
 MAIL_FROM = "BTC 점검 <onboarding@resend.dev>"
+BRIEF_HOURS = [9]        # 악재·호재 브리핑을 붙이는 실행 시각(KST 시). config.json의 brief_hours로 덮어씀
 SHOCK_RET, SHOCK_RNG, SHOCK_MULT = 0.025, 0.035, 6   # 급변동: 1시간 봉 등락 2.5% 또는 봉 길이 3.5% 이상, 둘 다 평소(7일 중앙값)의 6배 이상
 
 def load_config(wd):
@@ -39,6 +41,7 @@ def load_config(wd):
     START_CAPITAL = float(c["start_capital"]); BALANCE = float(c.get("balance", START_CAPITAL))
     TARGET_BAL = float(c["target_balance"]); TARGET_NOTE = c.get("target_note", ""); MAIL_TO = c["mail_to"]
     global BOX_RISK_FRAC; BOX_RISK_FRAC = float(c.get("box_risk_frac", BOX_RISK_FRAC))
+    global BRIEF_HOURS; BRIEF_HOURS = [int(h) for h in c.get("brief_hours", [9])]
 
 def get(url, tries=3):
     for i in range(tries):
@@ -291,6 +294,8 @@ def collect(wd):
     # 7) 참고: 추정 청산 구간 (OKX 미결제약정 기반)
     try: out["liqmap"] = liq_map()
     except Exception as e: err.append(f"청산 구간: {e}")
+
+    out["brief_due"] = now.hour in BRIEF_HOURS                 # 이 실행에서 악재·호재 브리핑(brief.txt)을 붙이는지
 
     # 8) 참고: 최근 24시간 급변동 (1시간 봉)
     try: out["shock"] = shocks(now)
@@ -593,6 +598,7 @@ def compose(o):
            "- 가격은 Coinbase 현물 기준입니다. Bybit 선물과 저가가 조금 다를 수 있으니 손절가는 Bybit 차트로 확인하세요.",
            "- 권고 레버리지와 청산가는 격리 마진 기준의 어림값입니다. 실제 청산가는 주문 화면에서 확인하고, 손절가보다 아래인지 보세요.",
            f"- 수량은 잔고 {BALANCE:,.0f} USDT 기준입니다. 거래 후 잔고가 바뀌면 그 비율만큼 조정하세요.",
+           "- 악재·호재 브리핑은 매일 " + ", ".join(f"{h:02d}시" for h in BRIEF_HOURS) + " 메일에 붙습니다.",
            f"- 실행 시각 {o['run_at_kst']} KST" + ("" if not o["errors"] else " / 수집 오류: " + "; ".join(o["errors"]))]
     foot = "정해진 규칙에 따른 자동 보고이며 매수·매도 권유가 아닙니다."
     # ── 텍스트 ──
@@ -600,6 +606,7 @@ def compose(o):
     if size_title: B += ["■ " + size_title] + size_lines(z) + [""]
     B += ["■ 보유 중이라면: 추적 손절"] + trail + [""]
     if livel: B += ["■ 지금 (09시 이후 진행 중인 일봉)"] + livel + [""]
+    if o.get("brief_due"): B += ["{{브리핑}}"]
     if shl: B += ["■ " + sh_title] + shl + ["{{뉴스}}", "- " + sh_note, ""]
     if evl: B += ["■ " + ev_title] + ([f"- ⚠ {ev_warn}"] if ev_warn else []) + evl + ["- " + ev_note, ""]
     if trl: B += ["■ " + tr_title] + trl + [""]
@@ -648,6 +655,7 @@ def compose(o):
     H.append(card("3. 보유 중이라면: 추적 손절", tinner, border="#6e7ff3", bg="#f7f8ff", tcolor="#3b4bc4", thick=True))
     H.append(card(esc(crit_title), checks(crit)))
     if livel: H.append(card("지금 (09시 이후 진행 중인 일봉)", ul(livel)))
+    if o.get("brief_due"): H.append("<!--BRIEF-->")
     if shl:
         sfg, sbg, sbd = KIND["far"]
         H.append(card(sh_title, ul(shl) + "<!--NEWS-->" + ul([sh_note], 12, "#57606a"), border=sbd, bg="#fffaf0", tcolor=sfg))
@@ -735,6 +743,44 @@ def compose(o):
            f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px"><tr><td>{"".join(H)}</td></tr></table></td></tr></table></body></html>')
     return subject, text, doc
 
+def parse_brief(txt):
+    """brief.txt: [악재] [호재] [일정] [요약] 구역, 항목은 '- 제목 | 설명 | URL' (설명·URL 생략 가능)."""
+    sec = {"악재": [], "호재": [], "일정": [], "요약": []}; cur = None
+    for line in txt.splitlines():
+        line = line.strip()
+        m = re.match(r"^\[(악재|호재|일정|요약)\]", line)
+        if m: cur = m.group(1); continue
+        if not cur or not line.startswith("-"): continue
+        parts = [x.strip() for x in line.lstrip("- ").split("|")]
+        url = parts[-1] if parts[-1].startswith("https://") else ""
+        if url: parts = parts[:-1]
+        title = parts[0] if parts else ""; desc = " ".join(parts[1:]) if len(parts) > 1 else ""
+        if title and len(sec[cur]) < {"악재": 5, "호재": 5, "일정": 3, "요약": 2}[cur]: sec[cur].append((title[:120], desc[:240], url))
+    return sec
+
+def render_brief(sec, stamp):
+    """(텍스트, HTML)."""
+    if not any(sec.values()):
+        msg = "오늘의 악재·호재 브리핑을 만들지 못했습니다."
+        return f"■ 오늘의 악재·호재\n- {msg}\n\n", card("오늘의 악재·호재", ul([msg], 13, "#57606a"))
+    T = [f"■ 오늘의 악재·호재 ({stamp} 기준, 판단 참고용)"]
+    for k, lab in (("요약", "요약"), ("악재", "악재"), ("호재", "호재"), ("일정", "볼 일정")):
+        for t, d, u in sec[k]: T.append(f"- {lab}: {t}" + (f". {d}" if d else "") + (f" ({u})" if u else ""))
+    T.append("- 기사 내용을 모은 것이며, 진입 판정에는 쓰지 않습니다. 판단은 직접 하세요.")
+    def items(rows, col):
+        return "".join(f'<div style="margin:0 0 8px;{FONT}"><div style="font-size:14px;font-weight:700;color:{col};line-height:1.45">{esc(t)}</div>'
+                       + (f'<div style="font-size:13px;color:#24292f;line-height:1.5">{esc(d)}' if d else '<div style="font-size:13px">')
+                       + (f' <a href="{esc(u)}" style="color:#3b4bc4;font-size:12px">출처</a>' if u else "") + "</div></div>" for t, d, u in rows)
+    h = ""
+    if sec["요약"]: h += "".join(f'<div style="font-size:14px;color:#24292f;line-height:1.55;background:#f6f8fa;border-radius:8px;padding:8px 10px;margin:0 0 10px">{esc(t + (". " + d if d else ""))}</div>' for t, d, u in sec["요약"])
+    h += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
+    h += f'<td width="50%" valign="top" style="padding:0 8px 0 0"><div style="font-size:12px;font-weight:800;color:#b3261e;margin:0 0 6px">▼ 악재</div>{items(sec["악재"], "#b3261e") or "<div style=font-size:13px>없음</div>"}</td>'
+    h += f'<td width="50%" valign="top" style="padding:0 0 0 8px;border-left:1px solid #eaeef2"><div style="font-size:12px;font-weight:800;color:#0f7b3f;margin:0 0 6px">▲ 호재</div>{items(sec["호재"], "#0f7b3f") or "<div style=font-size:13px>없음</div>"}</td>'
+    h += "</tr></table>"
+    if sec["일정"]: h += '<div style="font-size:12px;font-weight:700;color:#57606a;margin:8px 0 4px">볼 일정</div>' + items(sec["일정"], "#3b4bc4")
+    h += ul(["기사 내용을 모은 것이며, 진입 판정에는 쓰지 않습니다. 판단은 직접 하세요."], 12, "#57606a")
+    return "\n".join(T) + "\n\n", card(f"오늘의 악재·호재 ({esc(stamp)} 기준, 판단 참고용)", h, border="#8b9cf7", bg="#ffffff", tcolor="#3b4bc4", thick=True)
+
 def send(wd, note_path=None, prefix=""):
     load_config(wd)
     flag = os.path.join(wd, "sent.json")
@@ -757,6 +803,11 @@ def send(wd, note_path=None, prefix=""):
     nh = "".join(f'<div style="font-size:14px;color:#24292f;line-height:1.55;margin:6px 0 4px">원인 뉴스: {esc(t)}'
                  + (f' <a href="{esc(u)}" style="color:#3b4bc4;font-size:12px">출처</a>' if u else "") + "</div>" for t, u in news)
     doc = doc.replace("<!--NEWS-->", nh)
+    if st.get("brief_due"):                                     # 악재·호재 브리핑: <작업폴더>/brief.txt
+        bf = os.path.join(wd, "brief.txt")
+        sec = parse_brief(clean(open(bf, encoding="utf-8", errors="replace").read())) if os.path.exists(bf) else {"악재": [], "호재": [], "일정": [], "요약": []}
+        bt, bh = render_brief(sec, st["run_at_kst"][5:].replace("-", "/"))
+        body = body.replace("{{브리핑}}\n", bt); doc = doc.replace("<!--BRIEF-->", bh)
     import base64
     atts = []
     for k in ("trend", "box"):

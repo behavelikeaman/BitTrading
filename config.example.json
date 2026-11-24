@@ -1,8 +1,12 @@
 {
-  "mail_to": "you@example.com",
-  "start_capital": 1000,
-  "balance": 1000,
-  "target_balance": 4000,
-  "target_note": "",
-  "box_risk_frac": 0.03
+ "mail_to": "you@example.com",
+ "start_capital": 1000,
+ "balance": 1000,
+ "target_balance": 4000,
+ "target_note": "",
+ "box_risk_frac": 0.03,
+ "brief_hours": [
+  9,
+  21
+ ]
 }
