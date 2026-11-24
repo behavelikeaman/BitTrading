@@ -741,13 +741,14 @@ def send(wd, note_path=None, prefix=""):
     if os.path.exists(flag): print("이미 발송됨:", open(flag).read()); return
     st = json.load(open(os.path.join(wd, "state.json"))); body = open(os.path.join(wd, "draft.txt")).read()
     doc = open(os.path.join(wd, "draft.html")).read()
-    note = open(note_path).read().strip() if note_path and os.path.exists(note_path) else ""
+    clean = lambda x: re.sub(r"[\ufffd\x00-\x08\x0b-\x1f\x7f]", "", x)          # 모델이 쓴 글에서 깨진 글자·제어 문자 제거
+    note = clean(open(note_path, encoding="utf-8", errors="replace").read()).strip() if note_path and os.path.exists(note_path) else ""
     body = body.replace("{{해석}}\n\n", ("■ 해석\n" + note + "\n\n") if note else "")
     doc = doc.replace("<!--NOTE-->", card("해석", ul([x for x in note.splitlines() if x.strip()])) if note else "")
     # 급변동 원인 뉴스: <작업폴더>/news.txt, 한 줄에 "- 요약 | 출처 URL" (최대 3줄). 없으면 자리만 지운다
     nf = os.path.join(wd, "news.txt"); news = []
     if os.path.exists(nf):
-        for x in open(nf).read().splitlines()[:3]:
+        for x in clean(open(nf, encoding="utf-8", errors="replace").read()).splitlines()[:3]:
             x = x.strip().lstrip("- ").strip()
             if not x: continue
             t, _, u = x.partition("|"); t, u = t.strip(), u.strip()
