@@ -13,6 +13,7 @@
   - 추적 손절 = 매일 09시, 최근 7일 최저가의 1% 아래가 더 높으면 그쪽으로 올림
   - 손절되면 다음 신호에 재진입
 급변동: 최근 24시간 1시간 봉 급등락을 참고로 표시합니다. <작업폴더>/news.txt가 있으면 원인 뉴스로 붙입니다("- 요약 | URL").
+예정 이벤트: 저장소의 events.json(공식 발표 일정)과 계산한 옵션 만기를 참고로 표시합니다.
 별첨: 저장소의 views.json에 있는 외부 의견을 메일 끝에 붙입니다(만료일이 지나면 자동으로 빠짐, 판정에는 쓰지 않음).
 차트: matplotlib이 있으면 추세·박스 차트 PNG를 만들어 메일에 인라인 첨부합니다. 없으면 글로만 보냅니다.
 """
@@ -295,7 +296,13 @@ def collect(wd):
     try: out["shock"] = shocks(now)
     except Exception as e: err.append(f"급변동 감지: {e}")
 
-    # 9) 별첨: 외부 전문가 의견 (저장소의 views.json, 판정에는 쓰지 않음)
+    # 9) 참고: 예정 이벤트 일정 (저장소의 events.json + 옵션 만기 계산)
+    try:
+        out["events"] = load_events(now)
+        if out["events"]["stale"]: err.append(f"이벤트 일정 파일이 {out['events']['stale']}까지만 있습니다. 갱신이 필요합니다")
+    except Exception as e: err.append(f"이벤트 일정: {e}")
+
+    # 10) 별첨: 외부 전문가 의견 (저장소의 views.json, 판정에는 쓰지 않음)
     try: out["views"] = load_views(now)
     except Exception as e: err.append(f"외부 의견 파일: {e}")
 
@@ -339,6 +346,31 @@ def shocks(now):
                         up=up, pre=pre, ext=ext, ext_pct=ext/pre-1, bar_pct=C[a]/O[a]-1, bars=e["last"]-a+1, now=last_px, now_pct=last_px/pre-1, retrace=retr,
                         typical=med(ret[a-168:a])))
     return out
+
+def load_events(now):
+    """저장소 events.json의 예정 이벤트 + 계산되는 옵션 만기. 지난 12시간 ~ 앞으로 21일."""
+    fp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "events.json")
+    ev = []; stale = None
+    if os.path.exists(fp):
+        j = json.load(open(fp))
+        for e in j.get("events", []):
+            ev.append(dict(t=dt.datetime.strptime(e["utc"], "%Y-%m-%dT%H:%MZ").replace(tzinfo=UTC), name=e["name"], level=e.get("level", 2)))
+        vu = dt.datetime.strptime(j.get("valid_until", "2000-01-01"), "%Y-%m-%d").replace(tzinfo=UTC)
+        if now > vu - dt.timedelta(days=14): stale = j.get("valid_until")
+    y, m = now.year, now.month
+    for k in range(3):                                          # Deribit 월말 옵션 만기: 마지막 금요일 08:00 UTC
+        yy, mm = y + (m - 1 + k) // 12, (m - 1 + k) % 12 + 1
+        d = dt.datetime(yy + (mm == 12), mm % 12 + 1, 1, 8, tzinfo=UTC) - dt.timedelta(days=1)
+        while d.weekday() != 4: d -= dt.timedelta(days=1)
+        q = mm in (3, 6, 9, 12)
+        ev.append(dict(t=d, name="비트코인 옵션 " + ("분기 만기 (규모 큼)" if q else "월말 만기") + " · Deribit", level=2 if q else 1))
+    out = []
+    for e in sorted(ev, key=lambda e: e["t"]):
+        h = (e["t"] - now).total_seconds() / 3600
+        if -12 <= h <= 21*24:
+            out.append(dict(kst=e["t"].astimezone(KST).strftime("%m/%d(%a) %H:%M").replace("Mon", "월").replace("Tue", "화").replace("Wed", "수").replace("Thu", "목").replace("Fri", "금").replace("Sat", "토").replace("Sun", "일"),
+                            name=e["name"], level=e["level"], hours=h))
+    return dict(items=out, stale=stale)
 
 def load_views(now):
     """저장소의 views.json에서 아직 유효한 외부 의견만 고른다."""
@@ -533,6 +565,24 @@ def compose(o):
         shl.append(f"- {e['start_kst']}부터 {e['bars']}시간 {dirw}: {usd(e['pre'])} → {'고가' if e['up'] else '저가'} {usd(e['ext'])} ({pc(e['ext_pct'])}). 평소 1시간 등락은 {e['typical']*100:.1f}% 안팎")
         shl.append(f"- 지금 {usd(e['now'])} (직전 대비 {pc(e['now_pct'])}): {rw}")
     sh_title = "급변동 감지 (최근 24시간, 참고)"
+    evs = (o.get("events") or {}).get("items", [])
+    def when(h):
+        if h < 0: return f"{-h:.0f}시간 전 발표"
+        if h < 1: return "1시간 안"
+        return f"{h:.0f}시간 뒤" if h < 48 else f"{h/24:.0f}일 뒤"
+    star = lambda lv: "★" * lv
+    ev_past = [e for e in evs if e["hours"] < 0]; ev_soon = [e for e in evs if 0 <= e["hours"] < 48]; ev_later = [e for e in evs if e["hours"] >= 48][:4]
+    evl = []
+    for e in ev_past: evl.append(f"- 방금: {e['kst']} {e['name']} {star(e['level'])} ({when(e['hours'])})")
+    for e in ev_soon: evl.append(f"- 48시간 안: {e['kst']} {e['name']} {star(e['level'])} ({when(e['hours'])})")
+    if not ev_soon: evl.append("- 앞으로 48시간 안에 예정된 주요 이벤트는 없습니다.")
+    for e in ev_later: evl.append(f"- 이후: {e['kst']} {e['name']} {star(e['level'])} ({when(e['hours'])})")
+    big_soon = [e for e in ev_soon if e["level"] >= 2 and e["hours"] < 24]
+    ev_warn = ""
+    if big_soon and (real or (lv and lv.get("proj", {}).get("signal"))):
+        ev_warn = f"진입 신호가 걸린 상태에서 24시간 안에 {big_soon[0]['name']} 발표가 있습니다. 발표 전후로 크게 흔들릴 수 있습니다."
+    ev_title = "예정 이벤트 (KST, 참고)"
+    ev_note = "★이 많을수록 시장이 크게 움직인 적이 많은 일정입니다. 방향은 미리 알 수 없고, 진입 판정에는 쓰지 않습니다. 일정은 공식 발표 기준이며 바뀔 수 있습니다."
     sh_note = "1시간 봉 기준 참고 정보입니다. 진입 판정은 09시 일봉 종가로만 하므로, 되돌려진 급등락은 판정에 영향이 없습니다."
     plan = [f"- 시작 자금 {START_CAPITAL:,.0f} USDT, 기간 90일, 목표 잔고 {TARGET_BAL:,.0f} USDT" + (f" ({TARGET_NOTE})" if TARGET_NOTE else ""),
             f"- 시도당 최대 손실 {START_CAPITAL*RISK_FRAC:,.0f} USDT, 포지션은 잔고의 {LEV_CAP}배 이하",
@@ -551,6 +601,7 @@ def compose(o):
     B += ["■ 보유 중이라면: 추적 손절"] + trail + [""]
     if livel: B += ["■ 지금 (09시 이후 진행 중인 일봉)"] + livel + [""]
     if shl: B += ["■ " + sh_title] + shl + ["{{뉴스}}", "- " + sh_note, ""]
+    if evl: B += ["■ " + ev_title] + ([f"- ⚠ {ev_warn}"] if ev_warn else []) + evl + ["- " + ev_note, ""]
     if trl: B += ["■ " + tr_title] + trl + [""]
     if bxl: B += ["■ " + bx_title] + bxl + [""]
     if lml: B += ["■ " + lm_title] + lml + [""]
@@ -600,6 +651,19 @@ def compose(o):
     if shl:
         sfg, sbg, sbd = KIND["far"]
         H.append(card(sh_title, ul(shl) + "<!--NEWS-->" + ul([sh_note], 12, "#57606a"), border=sbd, bg="#fffaf0", tcolor=sfg))
+    if evl:
+        def evrow(e, tag, c):
+            bold = "font-weight:700;" if e["level"] >= 3 else ""
+            return (f'<tr><td valign="top" style="padding:4px 8px 4px 0;{FONT};font-size:12px;white-space:nowrap;color:{c};font-weight:700">{tag}</td>'
+                    f'<td valign="top" style="padding:4px 8px 4px 0;{FONT};font-size:13px;white-space:nowrap;color:#57606a">{esc(e["kst"])}</td>'
+                    f'<td style="padding:4px 0;{FONT};font-size:13px;color:#24292f;{bold}line-height:1.45">{esc(e["name"])} <span style="color:#e0a100">{star(e["level"])}</span>'
+                    f'<br><span style="font-size:12px;color:#57606a;font-weight:400">{when(e["hours"])}</span></td></tr>')
+        rows = "".join(evrow(e, "방금", "#57606a") for e in ev_past) + "".join(evrow(e, "48h 안", "#b3261e") for e in ev_soon)
+        if not ev_soon: rows += f'<tr><td colspan="3" style="padding:4px 0;{FONT};font-size:13px;color:#0f7b3f">앞으로 48시간 안에 예정된 주요 이벤트는 없습니다.</td></tr>'
+        rows += "".join(evrow(e, "이후", "#8b949e") for e in ev_later)
+        ein = (f'<div style="font-size:14px;font-weight:600;color:#b3261e;background:#fdecea;border-radius:8px;padding:8px 10px;margin:0 0 8px;line-height:1.5">{esc(ev_warn)}</div>' if ev_warn else "")
+        ein += f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0">{rows}</table>' + ul([ev_note], 12, "#57606a")
+        H.append(card(ev_title, ein))
     if trl:
         def pill(t):
             c = {"상승": ("#0f7b3f", "#e6f4ea"), "하락": ("#b3261e", "#fdecea"), "중립": ("#57606a", "#f1f3f5")}[t]

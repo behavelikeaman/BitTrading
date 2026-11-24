@@ -1,0 +1,24 @@
+{
+ "_설명": "예정 이벤트 일정. utc는 발표 시각(UTC). 메일은 향후 48시간 안의 일정과 그다음 일정 몇 개를 보여 준다. 판정에는 쓰지 않는다. valid_until 2주 전부터 메일에 갱신 알림이 붙는다. 비트코인 옵션 월말 만기(Deribit, 매월 마지막 금요일 08:00 UTC)는 프로그램이 계산한다.",
+ "valid_until": "2027-03-31",
+ "events": [
+  {"utc": "2026-11-25T13:30Z", "name": "미국 PCE 물가 (10월분)", "level": 2, "src": "BEA"},
+  {"utc": "2026-11-26T05:00Z", "name": "미국 추수감사절 휴장 (27일은 단축 거래) · 유동성 얇음", "level": 1, "src": "NYSE"},
+  {"utc": "2026-12-04T13:30Z", "name": "미국 고용지표 (11월분)", "level": 2, "src": "BLS"},
+  {"utc": "2026-12-09T19:00Z", "name": "FOMC 금리 결정 + 점도표", "level": 3, "src": "Federal Reserve"},
+  {"utc": "2026-12-10T13:30Z", "name": "미국 CPI 물가 (11월분)", "level": 3, "src": "BLS"},
+  {"utc": "2026-12-23T13:30Z", "name": "미국 PCE 물가 (11월분)", "level": 2, "src": "BEA"},
+  {"utc": "2027-01-08T13:30Z", "name": "미국 고용지표 (12월분)", "level": 2, "src": "BLS"},
+  {"utc": "2027-01-13T13:30Z", "name": "미국 CPI 물가 (12월분)", "level": 3, "src": "BLS"},
+  {"utc": "2027-01-27T19:00Z", "name": "FOMC 금리 결정", "level": 3, "src": "Federal Reserve"},
+  {"utc": "2027-01-28T13:30Z", "name": "미국 PCE 물가 (12월분)", "level": 2, "src": "BEA"},
+  {"utc": "2027-02-05T13:30Z", "name": "미국 고용지표 (1월분)", "level": 2, "src": "BLS"},
+  {"utc": "2027-02-11T13:30Z", "name": "미국 CPI 물가 (1월분)", "level": 3, "src": "BLS"},
+  {"utc": "2027-02-24T21:20Z", "name": "엔비디아 실적 발표 (예상일, 미확정)", "level": 2, "src": "추정"},
+  {"utc": "2027-02-25T13:30Z", "name": "미국 PCE 물가 (1월분)", "level": 2, "src": "BEA"},
+  {"utc": "2027-03-05T13:30Z", "name": "미국 고용지표 (2월분)", "level": 2, "src": "BLS"},
+  {"utc": "2027-03-10T13:30Z", "name": "미국 CPI 물가 (2월분)", "level": 3, "src": "BLS"},
+  {"utc": "2027-03-17T18:00Z", "name": "FOMC 금리 결정 + 점도표", "level": 3, "src": "Federal Reserve"},
+  {"utc": "2027-03-31T12:30Z", "name": "미국 PCE 물가 (2월분)", "level": 2, "src": "BEA"}
+ ]
+}
